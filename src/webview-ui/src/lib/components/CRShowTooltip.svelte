@@ -4,9 +4,37 @@
   let tooltipEl = $state<HTMLElement>()
   let reactTooltip = $state<HTMLElement | string>()
 
+  function addCloseButton(tooltipEl: HTMLElement, onClose: () => void) {
+    // Remove old one if present
+    tooltipEl.querySelector('.tooltip-close')?.remove()
+
+    const btn = document.createElement('div')
+    btn.className = 'tooltip-close'
+    // btn.type = 'button'
+    btn.setAttribute('aria-label', 'Close')
+    btn.innerText = '❌'
+    Object.assign(btn.style, {
+      fontSize: '12px',
+      padding: '2px',
+      border: '1px solid gray',
+      borderRadius: '4px',
+      display: 'inline-block',
+      cursor: 'pointer',
+    })
+
+    btn.addEventListener('click', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      onClose()
+    })
+
+    tooltipEl.style.position ||= 'relative'
+    tooltipEl.appendChild(btn)
+  }
   export function setTooltip(
     tooltip: HTMLElement | string,
     customStyles: Partial<CSSStyleDeclaration> = {},
+    timeout: number,
   ) {
     try {
       reactTooltip = tooltip as HTMLElement | string
@@ -22,7 +50,15 @@
       } else {
         tooltipRect = (tooltip as HTMLElement).getBoundingClientRect()
         tooltipEl = tooltip as HTMLElement
+        Object.assign(tooltipEl.style, customStyles)
       }
+      console.log('[OrmOne] setTooltip', tooltipEl)
+      if (timeout === 0) {
+        console.log('[OrmOne] setTooltip timeout', timeout)
+
+        addCloseButton(tooltipEl, hideTooltip)
+      }
+      console.log('[OrmOne] setTooltip wit x', tooltipEl)
       tooltipEl.style.cssText +=
         'opacity:0; transform:scale(0); transition: opacity 0.5s ease, transform 0.8s ease;'
     } catch (err: unknown) {
@@ -45,10 +81,12 @@
             x += (hoveringElRect as DOMRect).width + 6
             break
           case 'above':
+          case 'over':
             x += ((hoveringElRect as DOMRect).width - tooltipRect!.width) / 2
             y -= tooltipRect!.height + 6
             break
           case 'above-at-left':
+          case 'over-at-left':
             x -= tooltipRect!.width / 2
             y -= tooltipRect!.height + 6
             break
@@ -81,14 +119,14 @@
     e: MouseEvent | HTMLElement,
     tooltip: HTMLElement | string,
     stick: TStick,
+    timeout: number = 3000,
     customStyles: Partial<CSSStyleDeclaration> = {
       backgroundColor: 'aliceblue',
       color: 'navy',
     },
-    timeout: number = 0,
   ) {
     try {
-      tooltipEl = setTooltip(tooltip, customStyles) as HTMLElement
+      tooltipEl = setTooltip(tooltip, customStyles, timeout) as HTMLElement
       let hoveringEl: HTMLElement
       if (e instanceof MouseEvent) {
         hoveringEl = document.elementFromPoint(
@@ -106,7 +144,7 @@
       if (timeout > 0) {
         setTimeout(() => {
           hideTooltip()
-        }, 2000)
+        }, timeout)
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)

@@ -67,7 +67,14 @@ declare global {
     args: string[]
     error?: Error
   }
-  export type TStick = 'left' | 'right' | 'above' | 'above-at-left' | 'below'
+  export type TStick =
+    | 'left'
+    | 'right'
+    | 'above'
+    | 'above-at-left'
+    | 'over'
+    | 'over-at-left'
+    | 'below'
   // export type DependencyType = 'dependencies' | 'devDependencies'
   namespace App {
     // interface Error {}

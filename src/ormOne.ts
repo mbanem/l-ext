@@ -8,8 +8,7 @@ import { runCommandStream } from './run-command-stream'
 import { CommandResultTracker, sleep, waitForNewFile } from './extension'
 import { parsePrismaSchema } from './webview-ui/src/lib/utils/parse-prisma-schema.js'
 import { anyMissing } from './webview-ui/src/lib/utils'
-import { setDefaultHighWaterMark } from 'stream'
-import { setDefaultResultOrder } from 'dns'
+// import { kStringMaxLength } from 'node:buffer'
 // ====================== Types ======================
 interface DbParams {
   name: string
@@ -89,6 +88,83 @@ async function getDbParamsStatus(
   }
 
   return result
+}
+interface DropTarget {
+  admin: string // admin username
+  password: string // admin password
+  db?: string // database name
+  role?: string // role to drop
+  host?: string // optional, defaults to localhost
+  port?: number // optional, defaults to 5432
+}
+
+async function dropDatabaseAndRole(
+  target: DropTarget,
+): Promise<string | boolean> {
+  const { db, role, admin, password, host = 'localhost', port = 5432 } = target
+
+  // Basic safety check
+  const safeName = /^[a-zA-Z_][a-zA-Z0-9_]*$/
+  if ((db && !safeName.test(db)) || (role && !safeName.test(role))) {
+    throw new Error('Invalid database or role name')
+  }
+
+  const env = {
+    ...process.env,
+    PGPASSWORD: password,
+  }
+
+  const commonArgs = [
+    '-h',
+    host,
+    '-p',
+    String(port),
+    '-U',
+    admin,
+    '-d',
+    'postgres', // always connect to the maintenance DB
+  ]
+
+  try {
+    // 1. Force-disconnect all sessions from the target database
+    await execFileAsync(
+      'psql',
+      [
+        ...commonArgs,
+        '-c',
+        `
+        SELECT pg_terminate_backend(pid)
+        FROM pg_stat_activity
+        WHERE datname = '${db}'
+          AND pid <> pg_backend_pid();
+      `,
+      ],
+      { env },
+    )
+
+    // 2. Drop the database
+    if (db) {
+      await execFileAsync(
+        'dropdb',
+        ['--if-exists', '-h', host, '-p', String(port), '-U', admin, db],
+        { env },
+      )
+    }
+    // 3. Drop the role
+    if (role) {
+      await execFileAsync(
+        'psql',
+        [...commonArgs, '-c', `DROP ROLE IF EXISTS "${role}";`],
+        { env },
+      )
+    }
+    console.log(`Successfully dropped database "${db}" and role "${role}"`)
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('Failed to drop database/role:', msg)
+    return msg
+  }
+  return true
 }
 // ====================== Main Entry ======================
 export async function setupOrmOneMessageHandler(
@@ -243,11 +319,53 @@ export async function setupOrmOneMessageHandler(
       case 'checkDbParams':
         const dbParams = JSON.parse(msg.dbParams)
         const result = await getDbParamsStatus(dbParams)
+        console.log('[ormOne] dbParams & status', dbParams, result)
         console.log('[ormOne] dbparamsStatus', result.stdout)
         webview.postMessage({
           command: 'dbParamsStatus',
           dbParamsStatus: result.stdout,
         })
+        break
+
+      case 'dropDbObjects':
+        const commands = msg.commands
+        const db = JSON.parse(msg.dbParams)
+        console.log('[ormOne] dropDbObjects', msg)
+
+        const and = commands.length === 2 ? ' and ' : ''
+        let message = commands.includes('role') ? db.owner : ''
+
+        message += and + commands.includes('db') ? db.name : ''
+        const answer = await vscode.window.showWarningMessage(
+          message,
+          {
+            modal: true,
+            detail: 'This action is not recoverable',
+          },
+          'Yes',
+        )
+        console.log('[ormOne] confirmation answer', answer)
+
+        if (answer === 'Yes') {
+          let success = dropDatabaseAndRole({
+            admin: db.adminName,
+            password: db.adminPwd,
+            db: commands.includes('db') ? db.name : '',
+            role: commands.includes('role') ? db.owner : '',
+            host: db.host,
+            port: db.port,
+          })
+
+          webview.postMessage({
+            command: 'deleteDbObject',
+            message: success,
+          })
+        } else {
+          webview.postMessage({
+            command: 'deleteDbObject',
+            message: 'Cancelled!',
+          })
+        }
         break
       case 'approveBuildPackage':
         await runCommandStream('pnpm', ['approve-builds', msg.package], {
@@ -283,14 +401,14 @@ async function handleCheckOnPendingFile() {
     webview.postMessage({ command: 'pending-found-editor-loaded=schema-env' })
   }
 }
-
+let dbParams: any
 async function handlePrismaPartOne(
   msg: any,
 ): Promise<CommandResultTracker<boolean>> {
   const result = new CommandResultTracker<boolean>(true)
 
   try {
-    const dbParams = msg.dbParams ? JSON.parse(msg.dbParams) : null
+    dbParams = msg.dbParams ? JSON.parse(msg.dbParams) : null
     // if (
     //   !dbParams?.name ||
     //   !dbParams?.owner ||
@@ -382,14 +500,14 @@ async function prismaMigrateAndGenarate() {
       command: 'prismaMigrate',
       message: 'schems.prisma is valid. Migrating schema modles to database...',
     })
-    let result = await executeCommand(args.migrate)
+    let result = await executeCommand('pnpm', args.migrate)
 
     webview.postMessage({
       command: 'prismaGenerate',
       message: 'schems.prisma is valid. Generating supporting modules...',
     })
     if (result.success) {
-      result = await executeCommand(args.generate)
+      result = await executeCommand('pnom', args.generate)
     }
     if (!result.success) {
       console.log('[ormOne] prisma migrate and genarate failed')
@@ -486,12 +604,13 @@ async function installPackages(): Promise<CommandResultTracker<boolean>> {
 }
 const execFileAsync = promisify(execFile)
 async function executeCommand(
+  engine: string,
   args: string[],
 ): Promise<CommandResultTracker<boolean>> {
   let result = new CommandResultTracker<boolean>(true)
   console.log('[ormOne] executecommand args', args)
   try {
-    const { stdout, stderr } = await execFileAsync('pnpm', args, {
+    const { stdout, stderr } = await execFileAsync(engine, args, {
       cwd: paths.root,
       timeout: 30000, // 🚀 Raised to 30 seconds for absolute safety
     })
@@ -530,7 +649,7 @@ async function runPrismaInit(): Promise<CommandResultTracker<boolean>> {
   const result = new CommandResultTracker<boolean>(true)
   const args = getPrismaComandArgs()
   console.log('[ormOne] prisma commnd args', args)
-  if (!(await executeCommand(args.init))) {
+  if (!(await executeCommand('pnpm', args.init))) {
     console.log('[ormOne] prisma init failed')
     result.setSuccess(false)
     result.error = new Error('Prisma init failed')

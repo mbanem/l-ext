@@ -34,3 +34,34 @@
     }
   ]
 }
+// {
+//   "version": "0.2.0",
+//   "configurations": [
+//     {
+//       "name": "Extension Host",
+//       "type": "extensionHost",
+//       "request": "launch",
+//       "args": [
+//         "--extensionDevelopmentPath=${workspaceFolder}",
+//         "--remote-debugging-port=9222"
+//       ],
+//       "outFiles": ["${workspaceFolder}/out/**/*.js"]
+//     },
+//     {
+//       "name": "Attach to Webview UI",
+//       "type": "chrome",
+//       "request": "attach",
+//       "port": 9222,
+//       "webRoot": "${workspaceFolder}/webview-ui",
+//       "sourceMapPathOverrides": {
+//         "http://localhost:5174/*": "${workspaceFolder}/webview-ui/*"
+//       }
+//     }
+//   ],
+//   "compounds": [
+//     {
+//       "name": "Extension + Svelte Webview",
+//       "configurations": ["Extension Host", "Attach to Webview UI"]
+//     }
+//   ]
+// }

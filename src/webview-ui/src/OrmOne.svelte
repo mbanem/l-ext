@@ -7,9 +7,12 @@
   import CRShowTooltip from '$lib/components/CRShowTooltip.svelte'
   import { anyMissing, sixHash } from '$lib/utils'
 
-  let crShowTooltip: CRShowTooltip
+  let tt: CRShowTooltip
   let mandatoryEntriesEl: HTMLDivElement
   let validateDbParams: HTMLDivElement
+  let dbDepondOnRoleEl: HTMLDivElement
+  let deleteSelectedEl = $state<HTMLButtonElement>()
+  let dropMessage = $state('')
   let currentTask = $state('')
   // Vite will bundle/copy this asset automatically at build time
 
@@ -98,6 +101,15 @@
     border-radius: 4px;
     outline: none;
     `
+  const db_ = $state<DbParams>({
+    name: dbState.db.name,
+    owner: dbState.db.owner,
+    password: dbState.db.password,
+    host: dbState.db.host ?? 'localhost',
+    adminName: dbState.db.adminName,
+    adminPwd: dbState.db.adminPwd,
+    port: dbState.db.port ?? 5432, // JSON.parse abandone the rest if this is a number
+  })
   function startPrismaInstall() {
     if (dbParamsMissing) {
       isOpen = true
@@ -111,15 +123,6 @@
     progressPercents = 0
     logs = []
     statusMessage = 'Starting installation...'
-    const db_: DbParams = {
-      name: dbState.db.name,
-      owner: dbState.db.owner,
-      password: dbState.db.password,
-      host: dbState.db.host ?? 'localhost',
-      adminName: dbState.db.adminName,
-      adminPwd: dbState.db.adminPwd,
-      port: dbState.db.port ?? 5432, // JSON.parse abandone the rest if this is a number
-    }
     // console.log('[OrmOne] postCommand prismaPartOne', db_)
     vscode.postMessage({
       command: 'prismaPartOne',
@@ -227,9 +230,6 @@
           //   payload: 'sent from OrmOne after receviing prismaPartOneDone',
           // })
           break
-        case 'notValidSchemaOrEnv':
-          //// console.log('[OrmOne] invalid models or env', msg)
-          break
         case 'prismaProgress':
           progressPercents = Number(msg.percent)
           statusMessage = msg.message
@@ -323,7 +323,19 @@
           break
 
         case 'prismaPartOneFailed':
-          //// console.log('[OrmOne] got prismaPartOne failed')
+        //// console.log('[OrmOne] got prismaPartOne failed')
+        case 'deleteDbObject':
+          dropMessage = msg.message
+          tt.showTooltip(
+            deleteSelectedEl as HTMLButtonElement,
+            dropMessage,
+            'above-at-left',
+            0,
+            {
+              backgroundColor: 'cornsilk',
+              color: 'navy',
+            },
+          )
           break
       }
     }
@@ -350,14 +362,14 @@
   function showMandatoryEntries(e: MouseEvent) {
     if (e.type === 'mouseenter') {
       if (dbParamsMissing) {
-        crShowTooltip.showTooltip(e, mandatoryEntriesEl, 'below')
+        tt.showTooltip(e, mandatoryEntriesEl, 'below')
 
         markEmptyDbParamFields()
         // open db parameters block for user for db admin credentials
         isOpen = true
       } else {
         if (!dbParamsValid) {
-          crShowTooltip.showTooltip(e, validateDbParams, 'below')
+          tt.showTooltip(e, validateDbParams, 'below')
           isOpen = true
         } else {
           isOpen = false
@@ -365,8 +377,66 @@
       }
     } else if (e.type === 'mouseleave') {
       e.preventDefault()
-      crShowTooltip.hideTooltip()
+      tt.hideTooltip()
     }
+  }
+  let selected = $state([])
+  function dropSelected() {
+    console.log('[OrmOne] dropSelected msg', dropMessage)
+    if (dropMessage && deleteSelectedEl) {
+      tt.showTooltip(deleteSelectedEl, dropMessage, 'above-at-left', 0, {
+        backgroundColor: 'cornsilk',
+        color: 'navy',
+      })
+    }
+    let dropSelected: string[] = []
+    function part(cb: string) {
+      switch (String(cb)) {
+        case 'Role':
+          dropSelected.push('role')
+          break
+        case 'Database':
+          dropSelected.push('db')
+          break
+      }
+    }
+    for (const cb of selected) {
+      part(String(cb))
+    }
+    console.log(dropSelected)
+    if (dropSelected.includes('role') && !dropSelected.includes('db')) {
+      tt.showTooltip(
+        deleteSelectedEl as HTMLButtonElement,
+        dbDepondOnRoleEl,
+        'above-at-left',
+        0,
+        {
+          color: 'navy',
+          backgroundColor: 'cornsilk',
+        },
+      )
+      return
+    }
+    console.log(dropSelected, db_, JSON.stringify(db_))
+    vscode.postMessage({
+      command: 'dropDbObjects',
+      commands: dropSelected,
+      dbParams: JSON.stringify(db_),
+    })
+  }
+  function test() {
+    tt.showTooltip(
+      deleteSelectedEl as HTMLButtonElement,
+      `some test message
+            to see the behaviour
+            `,
+      'above-at-left',
+      0,
+      {
+        backgroundColor: 'aliceblue',
+        color: 'navy',
+      },
+    )
   }
 </script>
 
@@ -379,13 +449,18 @@
   <p>Role and DB cannot be created and</p>
   <p>Prisma ORM will be left inoperational</p>
 </div>
+<div class="cannot-remove-role" bind:this={dbDepondOnRoleEl} style="opacity:0;">
+  <p>Database is owned by this role</p>
+  <p>so role cannot be removed</p>
+  <p>before all its objects are</p>
+</div>
 <div class="mandatory-entries" bind:this={validateDbParams} style="opacity:0;">
   <p>All DB Params are specified</p>
   <p>Click 'Verify Params with Postgres'</p>
   <p>to see if that can be done and if not</p>
   <p>modify some of DB Params and repeat</p>
 </div>
-<CRShowTooltip bind:this={crShowTooltip} />
+<CRShowTooltip bind:this={tt} />
 {#snippet pagePurpose()}
   <pre>
     
@@ -421,8 +496,26 @@ Package Manager e.g. pnpm.
 {#snippet dbParamsStatus()}
   <div class="db-params-status">
     {#each dbStatusMsg.split('\n') as line (sixHash())}
-      <p>{line}</p>
+      {@const part = line.split(/\s+/)[0] || ''}
+      {#if line.includes('already exists')}
+        <input
+          type="checkbox"
+          value={part}
+          name="cbgroup"
+          style="display:inline-block;"
+          bind:group={selected}
+        />
+        <p>{line}</p>
+      {:else}
+        <p>{line}</p>
+      {/if}
+      <br />
     {/each}
+    {#if selected.length}
+      <button onclick={dropSelected} bind:this={deleteSelectedEl}
+        >delete selected</button
+      >
+    {/if}
   </div>
 {/snippet}
 
@@ -554,6 +647,7 @@ Package Manager e.g. pnpm.
     </div>
   {/if}
 {/if}
+<button onclick={test} style="z-index:100;">test</button>
 
 <style lang="scss">
   .page-info {
@@ -815,7 +909,8 @@ Package Manager e.g. pnpm.
     overflow: hidden;
     transition: all 0.2s ease;
   }
-  .mandatory-entries {
+  .mandatory-entries,
+  .cannot-remove-role {
     position: absolute;
     top: 0;
     left: 0;
@@ -834,6 +929,13 @@ Package Manager e.g. pnpm.
       padding: 3px 0;
       margin: 0;
     }
+  }
+  .cannot-remove-role {
+    @include container(
+      $head: 'Not Allowed',
+      $caption-color: tomato,
+      $caption-background-color: cornsilk
+    );
   }
   // .disabled{
   //     opacity: 0.5;
@@ -856,8 +958,15 @@ Package Manager e.g. pnpm.
       // color: var(--candidate-color);
       background-color: var(--candidate-bg-color);
       p {
-        margin: 0;
+        display: inline-block;
+        margin: 0 0 0 0.5rem;
         color: var(--candidate-color);
+      }
+      input {
+        display: inline-block;
+      }
+      button {
+        margin-left: 8rem;
       }
     }
   }
