@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.base.json", // ← relative, no package resolution issues
+  "compilerOptions": {
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "useDefineForClassFields": true,
+    "moduleResolution": "bundler",
+    "paths": {
+      "$lib/*": ["./src/lib/*"]
+    },
+    "types": ["vite/client", "svelte"] // ← fixes import.meta.hot
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.svelte",
+    "vite-env.d.ts",
+    "../prisma-models.ts",
+    "src/app.ha",
+    "../../app.d.ts"
+  ],
+  "references": [{ "path": "./tsconfig.node.json" }],
+  "exclude": ["node_modules", "dist"]
+}

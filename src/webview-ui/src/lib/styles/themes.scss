@@ -1,0 +1,87 @@
+:root {
+  font-family: var(--vscode-font-family);
+  color: var(--vscode-editor-foreground);
+  background: var(--vscode-editor-background);
+}
+
+:root[data-cr-theme='light'] {
+  --cr-text: #111;
+  --attr-id: #008000;
+  --bg: #f8f9fa;
+  --border-color: #d3d3d3;
+  --btn-bg: #121212;
+  --btn-text: #121212;
+  --candidate-color: navy;
+  --candidate-bg-color: aliceblue;
+  --card: #fff;
+  --close-all-color: navy;
+  --close-all-bg-color: aliceblue;
+  --close-all-bg-hover: skyblue;
+  --checkbox-label-color: #000080;
+  --drag-color: #00f;
+  --field-name: #1a1a6c;
+  --green-type: green;
+  --hover-button: red;
+  --icon-bg: #f8f9fa;
+  --input-bg-color: #f8f9fa;
+  --input-color: #121212;
+  --label-bg-color: #e1e1e1;
+  --label-color: #121212;
+  --model-name: #000080;
+  --model-bg-color: #d3d3d3;
+  --page-purpose-color: #121212;
+  --pre-color: navy;
+  --panel-bg-color: #f8f9fa;
+  --summary-bg-color: #b3e4f7;
+  --summary-color: navy;
+  --tab-color: #121212;
+  --tab-bg: #eee;
+  --tab-bg-hover: #ccc;
+  --tab-border: #808080;
+  --text: #212529;
+  --tomato-violet: #ff6347;
+  --border: 1px solid var(--tab-border);
+  --pre-title-color: navy;
+  --pre-title-shadow: #0000ff80;
+}
+
+:root[data-cr-theme='dark'] {
+  --cr-text: #eee;
+  --attr-id: #90ee90;
+  --bg: #121212;
+  --card: #1e1e1e;
+  --border-color: #515151;
+  --btn-bg: #f8f9fa;
+  --btn-text: #f8f9fa;
+  --pre-color: #87ceeb;
+  --panel-bg-color: #121212;
+  --icon-bg: #152121;
+  --label-bg-color: #323232;
+  --label-color: #a2a2a2;
+  --summary-bg-color: #87ceeb;
+  --summary-color: #121212;
+  --candidate-color: #87ceeb;
+  --candidate-bg-color: #121212;
+  --close-all-color: skyblue;
+  --close-all-bg-color: #121212;
+  --close-all-bg-hover: #656565;
+  --checkbox-label-color: #87ceeb;
+  --drag-color: #00f;
+  --field-name: #87ceeb;
+  --green-type: lightgreen;
+  --hover-button: yellow;
+  --input-bg-color: #f8f9fa;
+  --input-color: #e1e1e1;
+  --model-name: #87ceeb;
+  --model-bg-color: #121212;
+  --page-purpose-color: #7a7979;
+  --tab-color: #f8f9fa;
+  --tab-bg: #202020;
+  --tab-bg-hover: #161616;
+  --tab-border: #6e6e6e;
+  --text: #87ceeb;
+  --tomato-violet: #cb739f;
+  --border: 1px solid var(--tab-border);
+  --pre-title-color: skyblue;
+  --pre-title-shadow: #fffc;
+}

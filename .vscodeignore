@@ -1,0 +1,26 @@
+# .vscodeignore - Nuclear version (forces minimal package)
+#**/*
+#!out/
+#!out/extension.js
+#!out/**/*.js
+#!out/webview-assets/**
+#!out/webview-assets/**/*
+#!package.json
+#!README.md
+#!CHANGELOG.md
+#!LICENSE
+
+# Block source files and configurations not needed at runtime
+src/
+.vscode/
+tsconfig.json
+pnpm-lock.yaml
+.gitignore
+.svelte-kit/
+webview-ui/
+!pg
+# Block development-only assets in the out folder if any
+out/**/*.map
+
+# DO NOT block node_modules completely, let vsce filter it automatically
+# (vsce will strip out devDependencies on its own during packaging)

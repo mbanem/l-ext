@@ -1,0 +1,36 @@
+{
+  "name": "webview-ui",
+  "displayName": "l-ext",
+  "description": "Created CRUD app from Prisma ORM schema",
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "check": "svelte-check --tsconfig ./tsconfig.json --threshold error",
+    "dev": "clear; vite",
+    "build": "clear; vite build",
+    "preview": "cleart; vite preview"
+  },
+  "devDependencies": {
+    "@eslint/compat": "^2.0.2",
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.0.0",
+    "eslint-config-prettier": "^10.1.8",
+    "@prisma/config": "^7.5.0",
+    "@types/bcrypt": "latest",
+    "@types/node": "^25.2.1",
+    "@typescript-eslint/eslint-plugin": "^8.54.0",
+    "@typescript-eslint/parser": "^8.54.0",
+    "globals": "^17.3.0",
+    "postcss": "^8.5.6",
+    "postcss-load-config": "^6.0.1",
+    "prettier": "^3.8.1",
+    "prisma": "^7.3.0",
+    "sass": "^1.97.3",
+    "ts-node": "^10.9.2",
+    "typescript": "^6.0.2",
+    "typescript-eslint": "^8.54.0"
+  },
+  "dependencies": {
+    "tslib": "^2.8.1"
+  }
+}

@@ -1,0 +1,51 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+// :root {}
+
+// :global(.dark) {}
+
+
+
+// pre {
+//   font-size: 13px;
+//   color: var(--pre-color);
+//   line-height: 1rem;
+// }
+
+// :global(body) {
+// body {
+//   background-color: var(--bg);
+// }
+
+
+// input[type='text'] {
+//   width: 18rem;
+//   height: 20px;
+//   padding: 6px 0 8px 1rem;
+//   outline: none;
+//   font-size: 16px;
+//   border: 1px solid gray;
+//   border-radius: 4px;
+//   outline: 1px solid transparent;
+//   margin-top: 8px;
+//   margin-bottom: 10px;
+// }
+
+// input[type='text']:focus {
+//   outline: 1px solid gray;
+// }
+
+// button {
+//   display: inline-block;
+//   width: max-content;
+//   padding: 3px 1rem;
+//   text-align: center;
+//   font-size: 12px;
+//   cursor: pointer;
+//   user-select: none;
+//   margin-right: 1rem;
+// }

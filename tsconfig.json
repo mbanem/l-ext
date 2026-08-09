@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "noImplicitAny": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "types": ["node"],
+    "lib": ["ESNEXT", "DOM"], // ← NO "dom" here — only for extension code
+    "target": "ES2022",
+    "outDir": "out",
+    "rootDir": "src",
+    "module": "CommonJS",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
+    "ignoreDeprecations": "6.0",
+    "sourceMap": true
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "app.d.ts"],
+  "exclude": [
+    "node_modules",
+    "out",
+    "dist",
+    ".vscode",
+    "extension-original.ts",
+    "src/webview-ui",
+    "src/webview-ui/**",
+    "**/*.spec.ts",
+    "**/*.test.ts"
+  ]
+}
