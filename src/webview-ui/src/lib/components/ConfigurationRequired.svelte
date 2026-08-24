@@ -4,12 +4,10 @@
 <div class="config-warning-container">
   <h2>⚠️ Configuration Required</h2>
 
-  <h3>We couldn't read your Prisma schema or database connection.</h3>
-
   <p>
     The extension is currently paused because your <code>schema.prisma</code> file
     is invalid or cannot generate valid models. We are monitoring your workspace files
-    in the background and will automatically proceed once everything is ready.
+    in the background and will automatically proceed once you saved valid file contents.
   </p>
 
   <div class="requirements-box">
@@ -36,7 +34,7 @@
     </li>
   </ul>
 
-  <blockquote>
+  <!-- <blockquote>
     💡 <strong>Tip:</strong> Once your database connection is active and your schema
     saves successfully, this screen will update automatically.
   </blockquote>
@@ -50,7 +48,7 @@
     >. It will automatically scaffold your <code>+page.svelte</code>
     UI routes alongside your <code>+page.server.ts</code> server actions, directly
     mapped to your Prisma models.
-  </p>
+  </p> -->
 </div>
 
 <style lang="scss">

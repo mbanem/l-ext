@@ -18,19 +18,56 @@
 //     }
 //   ]
 // }
+// {
+//   "version": "0.2.0",
+//   "configurations": [
+//     {
+//       "name": "Run Extension",
+//       "type": "extensionHost",
+//       "request": "launch",
+//       "runtimeExecutable": "${execPath}",
+//       "args": [
+//         "--extensionDevelopmentPath=/home/mili/Ext/PreviousStages/l-ext"
+//         // Force the temporary instance to load your exact WSL path
+//       ],
+//       "outFiles": ["${workspaceFolder}/out/**/*.js"]
+//     }
+//   ]
+// }
+
+// {
+//   "version": "0.2.0",
+//   "configurations": [
+//     {
+//       "name": "Run Extension",
+//       "type": "extensionHost",
+//       "request": "launch",
+//       "args": ["--extensionDevelopmentPath=${workspaceFolder}"],
+//       "outFiles": [
+//         "${workspaceFolder}/out/**/*.js",
+//         "${workspaceFolder}/out/webview-assets/**/*.js"
+//       ],
+//       "preLaunchTask": "${defaultBuildTask}",
+//       "debugWebviews": true, // ← This is the key
+//       "trace": true // Optional: more logging
+//     }
+//   ]
+// }
 {
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Run Extension",
+      "name": "Launch Extension (WSL)",
       "type": "extensionHost",
       "request": "launch",
       "runtimeExecutable": "${execPath}",
       "args": [
-        "--extensionDevelopmentPath=/home/mili/Ext/PreviousStages/l-ext"
-        // Force the temporary instance to load your exact WSL path
+        "--extensionDevelopmentPath=${workspaceFolder}"
       ],
-      "outFiles": ["${workspaceFolder}/out/**/*.js"]
+      "outFiles": [
+        "${workspaceFolder}/out/**/*.js"
+      ],
+      "preLaunchTask": "watch" 
     }
   ]
 }

@@ -1,23 +1,28 @@
 <script lang="ts">
   import { vscode } from '$lib/utils/event-handler.browser'
-  import { onMount } from 'svelte'
-  import CRModelPermissionHandler from '$lib/components/CRModelPermissionHandler.svelte'
+  import { onMount, tick } from 'svelte'
+  import CRModelsHandler from '$lib/components/CRModelsHandler.svelte'
 
   type TProps = {
-    pageInfo: TToggleFunc
+    pageInfo: TCallbackFunc
   }
   let { pageInfo = $bindable() }: TProps = $props()
   let isActive = $state(false)
   function handlePageInfo() {
     isActive = isActive ? false : true
   }
-  pageInfo = handlePageInfo as TToggleFunc
+  pageInfo = handlePageInfo as TCallbackFunc
+  console.log('[OrmThree] entry point')
 
   let videoUris = $state<Record<string, string>>({})
   let videoName = $state('')
   let dialogEl = $state<HTMLDialogElement | null>(null)
-  function setVideoName(name: string) {
+  async function setVideoName(name: string) {
+    console.log('[OrmThree] videoUris[videoName]', videoUris[videoName])
+    console.log('[OrmThree] setVideoName', name, dialogEl)
     videoName = `${name}Video`
+    // Wait for Svelte 5 to update the DOM reactive markup based on the new videoName
+    await tick()
     // Open modal once video name is set
     dialogEl?.showModal()
   }
@@ -26,7 +31,9 @@
     videoName = ''
   }
   function handleDialogClick(e: MouseEvent) {
-    if (!dialogEl) return
+    if (!dialogEl) {
+      console.log('[OrmThree] handleDialogClick no dialogEL')
+      return}
 
     // Get the inner bounding rectangle of the dialog
     const rect = dialogEl.getBoundingClientRect()
@@ -34,19 +41,20 @@
     // Check if the click occurred OUTSIDE the dialog's visible boundaries (on the backdrop)
     const isOutside =
       e.clientX < rect.left ||
-      e.clientX > rect.right ||
+      e.clientX > rect.right + 50 ||
       e.clientY < rect.top ||
-      e.clientY > rect.bottom
+      e.clientY > rect.bottom + 50
 
     if (isOutside) {
       closeModal()
     }
   }
-  //  console.log('[App] top point after $props()')
+
   let appName = $state('')
   let isLoading = $state(true)
-  // // const vscode = acquireVsCodeApi()
+  // const vscode = acquireVsCodeApi()
   let models: Models = $state<Models>({}) as Models
+    // console.log('models', models??'no models')
   let inAction = $state(false)
   // NOTE selectedModels are maintained by CRModelPermissionHandler
   // when any checkbox on a component model list is selected
@@ -66,31 +74,31 @@
   // what authentication/authorization to implement should be optional?
   let appFeatures: string[] = $state([])
 
-  // function getPayload() {
-  //   if (Object.keys(selectedModels).length === 0) {
-  //     return selectedModels
-  //   }
+  function getPayload() {
+    if (Object.keys(selectedModels).length === 0) {
+      return selectedModels
+    }
 
-  //   let payload: Payload = {}
-  //   if (crComponents.length) {
-  //     payload['crComponents'] = $state.snapshot(crComponents)
-  //   }
-  //   for (const key of ['authorization', 'authentication']) {
-  //     const el = document.querySelector(
-  //       `input[name=${key}]:checked`,
-  //     ) as HTMLInputElement
-  //     if (el) {
-  //       payload[key] = el.value
-  //     }
-  //   }
-  //   if (appFeatures.length) {
-  //     payload['features'] = $state.snapshot(appFeatures)
-  //   }
+    let payload: Payload = {}
+    if (crComponents.length) {
+      payload['crComponents'] = $state.snapshot(crComponents)
+    }
+    for (const key of ['authorization', 'authentication']) {
+      const el = document.querySelector(
+        `input[name=${key}]:checked`,
+      ) as HTMLInputElement
+      if (el) {
+        payload[key] = el.value
+      }
+    }
+    if (appFeatures.length) {
+      payload['features'] = $state.snapshot(appFeatures)
+    }
 
-  //   payload['selectedModels'] = $state.snapshot(selectedModels)
+    payload['selectedModels'] = $state.snapshot(selectedModels)
 
-  //   return payload
-  // }
+    return payload
+  }
 
   // Webview sends message to the extension
   function createCRUDSupport(e: MouseEvent) {
@@ -119,7 +127,6 @@
   onMount(() => {
     try {
       console.log('[OrmThree] postMessage "ready" to extension')
-      isLoading = true
       vscode.postMessage({
         command: 'ready',
         payload: 'wait for sendingModels from extension',
@@ -131,17 +138,18 @@
         switch (msg.command) {
           case 'sendingModels':
             const pload = $state.snapshot(JSON.parse(msg.payload))
+            console.log('[OrmThree] getting models', pload.models)
             models = pload.models
             userRoles = Object.keys(
               Object.values(pload.enums)[0] as TEnum,
             ).filter(Boolean)
             appName = pload.appName
-            // videoUris = pload.videoUris
-            isLoading = false
+            videoUris = pload.videoUris
+            console.log('[OrmThree] videoUris', pload.videoUris)
             break
 
           case 'crudSuportDone':
-            console.log('[OrmThree] crudSuportDone')
+            //            console.log('[OrmThree] crudSuportDone')
             const crudButton = document.getElementById(
               'createBtnId',
             ) as HTMLDivElement
@@ -160,7 +168,7 @@
         window.removeEventListener('message', handler)
       }
     } catch (err: unknown) {
-      //      console.log('[App] onMount try/catch', err)
+      console.log('[OrmThree] onMount try/catch', err)
     }
   })
 </script>
@@ -168,7 +176,6 @@
 <svelte:head>
   <title>CRUD Support</title>
 </svelte:head>
-<!-- Modal Dialog Component -->
 <dialog
   bind:this={dialogEl}
   onclick={handleDialogClick}
@@ -177,6 +184,7 @@
   }}
 >
   {#if videoUris[videoName]}
+  {console.log('[OrmThree] videoUris[videoName]', videoUris[videoName])}
     <div class="modal-content">
       <button class="close-btn" onclick={closeModal} aria-label="Close modal"
         >✕</button
@@ -186,18 +194,11 @@
         <track kind="captions" />
       </video>
     </div>
+    {:else}
+    {console.log('[OrmThree] no videoUris[videoName]')}
   {/if}
 </dialog>
 
-{#snippet playVideo()}
-  <video autoplay loop muted playsinline src={videoUris[videoName]}>
-    <track kind="captions" />
-  </video>
-{/snippet}
-
-{#if videoUris[videoName]}
-  {@render playVideo()}
-{/if}
 {#snippet pagePurpose()}
   <pre>
   The main part of this page is on the right.
@@ -255,8 +256,8 @@
       value="ThemeIcon"
       bind:group={appFeatures}
     />
-    Include dark/light/system theme icon
-  </label>
+    Include dark/light/system theme icon</label
+  >
 
   <div class="authentication-authorization">
     <div class="authentication">
@@ -309,7 +310,7 @@
           onkeyup={() => setVideoName(comp)}
           aria-hidden={true}
         >
-          show in action
+          show {comp} in action
         </p>
       {/each}
     </div>
@@ -338,12 +339,12 @@
   <div class="application-settings">
     {@render pageByPageMiddleColumn()}
   </div>
-  <CRModelPermissionHandler
+  <CRModelsHandler
     {models}
     bind:selectedModels
     bind:isLoading
     {userRoles}
-  ></CRModelPermissionHandler>
+  ></CRModelsHandler>
 </div>
 
 <style lang="scss">
@@ -366,7 +367,7 @@
     grid-template-columns: 10rem 4rem;
     gap: 1rem;
     position: absolute;
-    top: 28rem;
+    top: 24rem;
     left: 5rem;
     #createBtnId {
       display: flex;
@@ -395,7 +396,6 @@
     }
   }
   .cr-main-grid {
-    border: 1ps solid tomato;
     position: relative;
     display: grid;
     grid-template-columns: 30rem 23rem;
@@ -412,7 +412,7 @@
     height: 100%;
   }
   .cr-left-column {
-    @include container($head: 'Application Settings', $head-color: navy);
+    @include container($caption: 'Application Settings', $caption-color: navy);
     position: relative;
     border: 1px solid gray;
     border-radius: 8px;
@@ -432,7 +432,7 @@
   }
 
   .embellishments {
-    @include container($head: 'Include Components', $head-color: navy);
+    @include container($caption: 'Include Components', $caption-color: navy);
     background-color: var(--panel-bg-color);
 
     position: relative;
@@ -477,8 +477,8 @@
   .authentication,
   .authorization {
     @include container(
-      $head: 'Authentication',
-      $head-color: navy,
+      $caption: 'Authentication',
+      $caption-color: navy,
       $padding: 0.5rem 1rem,
       $left: 1rem,
       $width: max-content
@@ -489,7 +489,7 @@
     margin: 0.5rem 0 1rem 0;
   }
   .authorization {
-    @include container($head: 'Authorization', $left: 0.5rem);
+    @include container($caption: 'Authorization', $left: 0.5rem);
     width: 16rem;
   }
   .authentication-authorization {
@@ -513,7 +513,7 @@
     overflow: auto;
 
     /* Initial size limits */
-    width: 550px;
+    width: auto;
     height: auto;
     min-width: 300px;
     min-height: 200px;

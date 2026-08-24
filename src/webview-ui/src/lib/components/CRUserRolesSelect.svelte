@@ -1,7 +1,3 @@
-<!--
-@component
-Ctrl+Shift+P   Local History: Find Entry to Restore
--->
 
 <script lang="ts">
   import { SvelteMap, SvelteSet } from 'svelte/reactivity'
@@ -130,8 +126,7 @@ Ctrl+Shift+P   Local History: Find Entry to Restore
 
 <style lang="scss">
   *,
-  *::before,
-  *::after {
+  *::before { 
     box-sizing: border-box;
   }
   .select-wrapper {
@@ -148,14 +143,17 @@ Ctrl+Shift+P   Local History: Find Entry to Restore
       width: 100%;
       line-height: 10px;
       height: 1rem;
-      border-radius: 4px;
-      color: var(--candidate-color);
+      color: var(--badge-color);
+			background-color: var(--badge-bg-color);
       border: 1px solid gray;
       border-radius: 4px;
       z-index: 20;
       .badge {
         display: inline-block;
         font-size: 11px;
+        line-height: 16px;
+        color: var(--badge-color);
+				background-color: var(--badge-bg-color);
         border: 1px solid gray;
         border-radius: 4px;
         padding: 0 2px;
@@ -174,25 +172,30 @@ Ctrl+Shift+P   Local History: Find Entry to Restore
   }
   .dropdown {
     position: absolute;
-    top: 3rem;
-    left: 5rem;
-    width: 8rem;
-    padding: 2px 1rem;
-    border: 1px solid gray;
-    border-radius: 6px;
-    background-color: var(--candidate-bg-color);
-    cursor: pointer;
-    user-select: none;
-    z-index: 20;
-    p {
-      font-size: 10px;
-      margin: 0;
-      padding: 1px 0;
-      &:hover {
-        width: 100%;
-        background-color: cornsilk;
-      }
-    }
+		top: 3rem;
+		left: 5rem;
+		width: 8rem;
+		padding: 4px 0;
+		border: 1px solid gray;
+		border-radius: 6px;
+		color: var(--candidate-color);
+		background-color: var(--candidate-bg-color);
+		cursor: pointer;
+		user-select: none;
+		z-index: 20;
+		p {
+			padding: 2px 1rem;
+			font-size: 10px;
+			margin: 0;
+			padding: 1px 0;
+			/*color: var(--clickable-label-color);
+			background-color: var(--candidate-bg-color);*/
+			&:hover {
+				width: 100%;
+				color: var(--drop-color);
+				background-color: var(--drop-bg-color);
+			}
+		}
     .letter {
       font-size: 11px;
       border: 1px solid gray;

@@ -21,21 +21,22 @@
     document.body.removeChild(container)
     return width
   }
-  function adjustX(
-    rect: DOMRect,
-    msgWidth: number,
-    stick?: TStickMsgToElement,
-  ) {
+  function adjustX(rect: DOMRect, msgWidth: number, stick?: TStick) {
     let x = window.scrollX
+    let y = window.scrollY
     if (stick) {
       switch (stick) {
-        case 'StickRights':
+        case 'left':
+          y += rect.top
+        case 'right':
           x += rect.right - msgWidth
           break
-        case 'StickMiddles':
+        case 'over':
+        case 'above':
           x += rect.x + (rect.width - msgWidth) / 2
           break
-        case 'MiddleToLeft':
+        case 'over-at-left':
+        case 'above-at-left':
           x += rect.x - msgWidth / 2
           break
         default:
@@ -59,7 +60,7 @@
   export function showMessage(
     e: MouseEvent | KeyboardEvent | HTMLElement,
     msg: string,
-    stick?: TStickMsgToElement,
+    stick?: TStick,
     customStyles: Partial<CSSStyleDeclaration> = {
       backgroundColor: 'aliceblue',
       color: 'navy',
@@ -99,23 +100,20 @@
       let y = rect.y + window.scrollY
 
       // position msgEl above the triggering element
-      Object.assign(
-        msgEl.style,
-        {
-          position: 'fixed',
-          left: `${x}px`,
-          top: `${y - 30}px`,
-          zIndex: '10',
-          pointerEvents: 'auto',
-          opacity: '1',
-          width: 'max-content',
-          padding: '2px 1rem',
-          textAlign: 'center',
-          backgroundColor: 'aliceblue',
-          borderRadius: '5px',
-        },
-        customStyles,
-      )
+      Object.assign(msgEl.style, {
+        position: 'fixed',
+        left: `${x}px`,
+        top: `${y - 30}px`,
+        zIndex: '10',
+        pointerEvents: 'auto',
+        opacity: '1',
+        width: 'max-content',
+        padding: '2px 1rem',
+        textAlign: 'center',
+        backgroundColor: 'aliceblue',
+        color: 'navy',
+        borderRadius: '5px',
+      })
       setTimeout(() => {
         msgEl.style.opacity = '0'
         disabled = false
@@ -127,6 +125,7 @@
   }
 </script>
 
+assign
 <div bind:this={msgEl} class="msg">
   {message}
 </div>

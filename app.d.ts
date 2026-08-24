@@ -45,7 +45,7 @@ declare global {
     string,
     SelectedModels | Model | string[] | string
   >
-  export type TToggleFunc = (() => void) | undefined
+  export type TCallbackFunc = (() => void) | undefined
   export type TPaths = Record<string, string>
   export type DbParams = Record<string, string | number>
 
@@ -67,14 +67,14 @@ declare global {
     args: string[]
     error?: Error
   }
-  export type TStick =
-    | 'left'
-    | 'right'
-    | 'above'
-    | 'above-at-left'
-    | 'over'
-    | 'over-at-left'
-    | 'below'
+
+  export const CStick = {
+  top: 'top',
+  right: 'right',
+  below: 'below',
+  left: 'left',
+} as const
+export type TStick = typeof CStick[keyof typeof CStick]
   // export type DependencyType = 'dependencies' | 'devDependencies'
   namespace App {
     // interface Error {}

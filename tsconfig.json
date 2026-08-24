@@ -15,7 +15,7 @@
     "ignoreDeprecations": "6.0",
     "sourceMap": true
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "app.d.ts"],
+  "include": ["src/**/*.ts", "src/**/*.tsx", "app.d.ts", "src/webview-ui/svelte.config.js"],
   "exclude": [
     "node_modules",
     "out",

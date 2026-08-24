@@ -4,6 +4,7 @@
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "useDefineForClassFields": true,
     "moduleResolution": "bundler",
+    "sourceMap": true,
     "paths": {
       "$lib/*": ["./src/lib/*"]
     },

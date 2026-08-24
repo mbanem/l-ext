@@ -3,6 +3,7 @@ import { defineConfig } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import { sveltePreprocess } from 'svelte-preprocess'
 import { resolve } from 'path'
+// import { visualizer } from 'rollup-plugin-visualizer'
 
 export default defineConfig({
   plugins: [
@@ -25,13 +26,19 @@ export default defineConfig({
         handler(warning)
       },
     }),
+    // visualizer({
+    //   emitFile: false,
+    //   filename: 'stats.html', // pravi HTML fajl sa grafikonom
+    //   open: true // automatski otvara grafikon u browseru nakon build-a
+    // })
   ],
 
   base: './',
 
   resolve: {
     alias: {
-      $lib: resolve(__dirname, 'src/lib'),
+      '$lib': resolve(__dirname, 'src/lib'),
+      '@': resolve(__dirname, './src'),
     },
   },
 
@@ -53,6 +60,7 @@ export default defineConfig({
     target: 'es2020',
     minify: 'esbuild',
     sourcemap: true,
+    // When you ship the extension you can switch to sourcemap: false or 'hidden' for the final package.
     manifest: true,
 
     rollupOptions: {

@@ -4,23 +4,30 @@
   import { fade } from 'svelte/transition'
   import HoveringDetails from '$lib/components/HoverableDetails.svelte'
   import ConfigurationRequired from '$lib/components/ConfigurationRequired.svelte'
-  import CRShowTooltip from '$lib/components/CRShowTooltip.svelte'
+  import CRTooltip from '$lib/utils/reactive-tooltip'
   import { anyMissing, sixHash } from '$lib/utils'
 
-  let tt: CRShowTooltip
+  let ttValidate: CRTooltip
   let mandatoryEntriesEl: HTMLDivElement
   let validateDbParams: HTMLDivElement
   let dbDepondOnRoleEl: HTMLDivElement
-  let deleteSelectedEl = $state<HTMLButtonElement>()
-  let dropMessage = $state('')
+  // let deleteSelectedEl: HTMLButtonElement
+  let cbGroup: string[] = $state([])
+  let verifyDbParamsEl=$state<HTMLButtonElement>()
+  let validationMessage = $state('')
+  let existingDbParts = $state('')
+  let paramsAreValid = $state(false)
+  // let dropMessage = $state('')
   let currentTask = $state('')
+  let progressMsg = $state('')
+  const prismaInitialized = 'Prisma ORM initialized.'
+  let arrDBParamsStatus: string[] = $state([])
   // Vite will bundle/copy this asset automatically at build time
 
   const RX =
     /^Progress:|\.\.\.\/node_modules\/|dependencies:|devDependencies:|\+ /
   // let currentDetailsEl: HTMLDetailsElement | undefined = $state()
   let rlCounter = $state(0)
-  let dbParamsValid = $state(false)
   // let rawLinesEl: HTMLDetailsElement
   // let depEl: HTMLDetailsElement
   // let devDepEl: HTMLDetailsElement
@@ -31,7 +38,6 @@
   let statusMessage = $state('Ready to install Prisma')
   let isInstalling = $state(false)
   let isOpen = $state(false)
-  let dbStatusAvailable = $state(false)
   let logs: { type: 'stdout' | 'stderr'; text: string }[] = $state([])
   // let progressLineEl: HTMLParagraphElement
   // let nodeModulesEl: HTMLDetailsElement
@@ -39,7 +45,6 @@
   // let otherLinesEl: HTMLDetailsElement
   // let dbParamsBlockEl: HTMLDivElement
 
-  let installPrismaButton = $state<HTMLButtonElement>()
   let progressCollector = $state<Record<string, string[]>>({})
   // let continueButton: HTMLButtonElement
 
@@ -81,7 +86,7 @@
   // begin of parsing progress rawLine for kind ot output
   // what does this page do handler
   type TProps = {
-    pageInfo: TToggleFunc
+    pageInfo: TCallbackFunc
   }
   let { pageInfo = $bindable() }: TProps = $props()
   let isActive = $state(false)
@@ -89,7 +94,7 @@
   function handlePageInfo() {
     isActive = isActive ? false : true
   }
-  pageInfo = handlePageInfo as TToggleFunc
+  pageInfo = handlePageInfo as TCallbackFunc
   // end of what does this page do handler
 
   const inputStyle = `
@@ -123,9 +128,9 @@
     progressPercents = 0
     logs = []
     statusMessage = 'Starting installation...'
-    // console.log('[OrmOne] postCommand prismaPartOne', db_)
+    // console.log('[OrmOne] postCommand installPrisma', db_)
     vscode.postMessage({
-      command: 'prismaPartOne',
+      command: 'installPrisma',
       useOnlyBuiltDependencies,
       dbParams: JSON.stringify(db_),
     })
@@ -154,6 +159,17 @@
       })
     }
     vscode.postMessage({ command: 'approveAllBuildPackages' })
+  }
+  function showValidationMessage() {
+    if (!validationMessage) {
+      return
+    }
+    console.log('[OrmOne] showValidationMessage', validationMessage)
+    const tt = new CRTooltip()
+    tt.show(verifyDbParamsEl, validationMessage, 0, 'above', {
+      color: 'navy',
+      backgroundColor: 'aliceblue',
+    })
   }
   function verifyDbParamsWithPostgres() {
     const db_: DbParams = {
@@ -198,7 +214,14 @@
       payload: 'close the extension',
     })
   }
-  let dbStatusMsg = $state('')
+// db params is open (isOpen is true)  and delete objects tooltip with close button 
+// is shown, so when user close tooltip we collapse db params (isOpen set to false) 
+
+function validateMsgClosed(){
+  console.log('[OrmOne] tooltipOnClose CALLED')
+  isOpen = false
+}
+  // let dbStatusMsg = $state('')
   onMount(() => {
     //// console.log('[OrmOne] to ormOne checkOnPendingFile')
     vscode.postMessage({
@@ -209,18 +232,49 @@
       switch (msg.command) {
         case 'prismaInstallStart':
           //// console.log('[OrmOne] got message prismaInistallStart')
-          currentTask = 'installing PNPM packages and initiating Prisma ORM...'
+          currentTask = 'installing PNPM packages...'
           break
         case 'pending-found-editor-loaded=schema-env':
           configRequired = true
           break
 
         case 'dbParamsStatus':
-          dbStatusMsg = msg.dbParamsStatus
-          dbStatusAvailable = true
+          validationMessage = msg.dbParamsStatus
+          paramsAreValid = validationMessage.includes('Params are Valid')
+          console.log('[OrmOne] paramsAreValid', paramsAreValid)
+          arrDBParamsStatus = validationMessage.split('\n').filter(Boolean)
+          console.log('[OrmOne] paramsAreValid', arrDBParamsStatus)
+
+          existingDbParts = arrDBParamsStatus
+            .map((line) =>
+              line.includes('Role')
+                ? 'Role'
+                : line.includes('Database')
+                  ? 'Database'
+                  : '',
+            )
+            .filter(Boolean)
+            .join(', ')
+
+          console.log('[OrmOne] arrDBParamsStatus', arrDBParamsStatus)
+          showValidationMessage()
           console.log('[OrmOne] endsWith', msg.dbParamsStatus)
-          dbParamsValid = dbStatusMsg.includes('Params are Valid')
-          console.log('dbParamsValid', dbParamsValid)
+          break
+
+        case 'deleteDbObjectsResult':
+          const success = msg.message.startsWith('Successfully')
+          const tt = new CRTooltip()
+          tt.show(
+            verifyDbParamsEl as HTMLButtonElement,
+            msg.message,
+            0,
+            'below',
+            success?{}:{
+              color: 'darkred',
+              backgroundColor: '#fff0f0',
+              border: '1px solid crimson',
+            },
+          )
           break
         case 'prismaPartOneDone':
           //// console.log('[OrmOne] got message', msg.command, msg.payloads)
@@ -252,7 +306,8 @@
               $inspect('create empty progressCollector for', m[0])
               progressCollector[m[0]] = []
             }
-            progressCollector[m[0]].push(msg.rawLine.slice(10).trim())
+            progressMsg = msg.rawLine.slice(10).trim()
+            progressCollector[m[0]].push(progressMsg)
             $inspect('progressCollector[m[0]]', progressCollector[m[0]])
             // p[m[0]] = rl.trim()
             // switch (m[0]) {
@@ -306,10 +361,12 @@
           break
 
         case 'prismaInstallSuccess':
+          // wait for msg.message that starts with 'Prisma initialized.'
           isInstalling = false
           progressPercents = 100
           statusMessage = msg.message
-          //// console.log('[OrmOne] got prismaInstallSuccess msg', msg)
+          progressMsg = ''
+          // console.log('[OrmOne] got prismaInstallSuccess msg', msg)
           currentTask = msg.message
           break
 
@@ -323,20 +380,21 @@
           break
 
         case 'prismaPartOneFailed':
-        //// console.log('[OrmOne] got prismaPartOne failed')
-        case 'deleteDbObject':
-          dropMessage = msg.message
-          tt.showTooltip(
-            deleteSelectedEl as HTMLButtonElement,
-            dropMessage,
-            'above-at-left',
-            0,
-            {
-              backgroundColor: 'cornsilk',
-              color: 'navy',
-            },
-          )
-          break
+        //// console.log('[OrmOne] got installPrisma failed')
+        // case 'verifyDbParamsEl':
+        //   dropMessage = msg.message
+        // const tt = new CRTooltip()
+        //   tt.show(
+        //     deleteSelectedEl as HTMLButtonElement,
+        //     dropMessage,
+        //     0,
+        //     'above',
+        //     {
+        //       backgroundColor: 'cornsilk',
+        //       color: 'navy',
+        //     },
+        //   )
+        //   break
       }
     }
     window.addEventListener('message', handler)
@@ -347,7 +405,9 @@
     }
   })
   function markEmptyDbParamFields() {
-    console.log('markEmptyDbParamFields')
+    console.log('[OrmOne] markEmptyDbParamFields')
+    validationMessage = ''
+    // dropMessage = ''
     for (const key of Object.keys(dbState.els)) {
       const el = dbState.els[`${key}El`] as HTMLInputElement
       if (el) {
@@ -360,84 +420,90 @@
     }
   }
   function showMandatoryEntries(e: MouseEvent) {
-    if (e.type === 'mouseenter') {
-      if (dbParamsMissing) {
-        tt.showTooltip(e, mandatoryEntriesEl, 'below')
-
-        markEmptyDbParamFields()
-        // open db parameters block for user for db admin credentials
+    if (paramsAreValid) return
+    // if (e.type === 'mouseenter') {
+    if (dbParamsMissing) {
+      console.log('[OrmmOne] showMandatoryEntries open dbParams')
+      ttValidate = new CRTooltip()
+      ttValidate.show(e, mandatoryEntriesEl, 30000, 'below', {color:'crimson'},validateMsgClosed)
+      
+      markEmptyDbParamFields()
+      // open db parameters block for user for db admin credentials
+      isOpen = true
+    } else {
+      if (!arrDBParamsStatus.join('').includes('Params are Valid')) {
+        console.log('[OrmmOne] showMandatoryEntries open parms are walid')
+        const tt = new CRTooltip()
+        tt.show(e, validateDbParams, 0, 'below')
         isOpen = true
       } else {
-        if (!dbParamsValid) {
-          tt.showTooltip(e, validateDbParams, 'below')
-          isOpen = true
-        } else {
-          isOpen = false
-        }
+        console.log('[OrmmOne] showMandatoryEntries close dbParams')
+
+        isOpen = false
       }
-    } else if (e.type === 'mouseleave') {
-      e.preventDefault()
-      tt.hideTooltip()
     }
+    // } else if (e.type === 'mouseleave') {
+    //   e.preventDefault()
+    //   tt.hideTooltip()
+    // }
   }
-  let selected = $state([])
   function dropSelected() {
-    console.log('[OrmOne] dropSelected msg', dropMessage)
-    if (dropMessage && deleteSelectedEl) {
-      tt.showTooltip(deleteSelectedEl, dropMessage, 'above-at-left', 0, {
-        backgroundColor: 'cornsilk',
-        color: 'navy',
-      })
-    }
-    let dropSelected: string[] = []
-    function part(cb: string) {
-      switch (String(cb)) {
-        case 'Role':
-          dropSelected.push('role')
-          break
-        case 'Database':
-          dropSelected.push('db')
-          break
-      }
-    }
-    for (const cb of selected) {
-      part(String(cb))
-    }
-    console.log(dropSelected)
-    if (dropSelected.includes('role') && !dropSelected.includes('db')) {
-      tt.showTooltip(
-        deleteSelectedEl as HTMLButtonElement,
-        dbDepondOnRoleEl,
-        'above-at-left',
-        0,
-        {
-          color: 'navy',
-          backgroundColor: 'cornsilk',
-        },
-      )
-      return
-    }
-    console.log(dropSelected, db_, JSON.stringify(db_))
+    console.log('[OrmOne] dropSelected msg')
+    existingDbParts =''
+    paramsAreValid = true
+    // ttValidate.hide()
+    // if (dropMessage && deleteSelectedEl) {
+    // const tt = new CRTooltip()
+    //   tt.showw(deleteSelectedEl, dropMessage, 0, 'left', {
+    //     backgroundColor: 'cornsilk',
+    //     color: 'navy',
+    //   })
+    // }
+    // let dropSelected: string[] = []
+    // function part(cb: string) {
+    //   switch (String(cb)) {
+    //     case 'Role':
+    //       dropSelected.push('role')
+    //       break
+    //     case 'Database':
+    //       dropSelected.push('db')
+    //       break
+    //   }
+    // }
+    // for (const cb of selected) {
+    //   part(String(cb))
+    // }
+    // console.log(dropSelected)
+    // if (dropSelected.includes('role') && !dropSelected.includes('db')) {
+    // const tt = new CRTooltip()
+    //   tt.show(
+    //     deleteSelectedEl as HTMLButtonElement,
+    //     dbDepondOnRoleEl,
+    //     3000,
+    //     'left',
+    //     {
+    //       color: 'navy',
+    //       backgroundColor: 'cornsilk',
+    //     },
+    //   )
+    //   return
+    // }
+    // sort ascending so Database wiil come first
+    let toDrop = [...cbGroup].sort((a, b) => a.localeCompare(b)).join(',')
+
+    console.log(
+      '[OrmOne] postMessage dropDbObjects',
+      toDrop,
+      db_,
+      JSON.stringify(db_),
+    )
     vscode.postMessage({
       command: 'dropDbObjects',
-      commands: dropSelected,
+      dropSelected: toDrop,
       dbParams: JSON.stringify(db_),
     })
   }
-  function test() {
-    tt.showTooltip(
-      deleteSelectedEl as HTMLButtonElement,
-      `some test message
-            to see the behaviour
-            `,
-      'above-at-left',
-      0,
-      {
-        backgroundColor: 'aliceblue',
-        color: 'navy',
-      },
-    )
-  }
+
 </script>
 
 <div
@@ -458,9 +524,9 @@
   <p>All DB Params are specified</p>
   <p>Click 'Verify Params with Postgres'</p>
   <p>to see if that can be done and if not</p>
-  <p>modify some of DB Params and repeat</p>
+  <p>modify some Params and repeat</p>
 </div>
-<CRShowTooltip bind:this={tt} />
+<!-- <CRReactiveTooltip bind:this={tt} onClose={tooltipOnClose}/> -->
 {#snippet pagePurpose()}
   <pre>
     
@@ -493,29 +559,29 @@ Package Manager e.g. pnpm.
   </div>
 {/if}
 
-{#snippet dbParamsStatus()}
+{#snippet shouldDeleteDbObjects()}
   <div class="db-params-status">
-    {#each dbStatusMsg.split('\n') as line (sixHash())}
-      {@const part = line.split(/\s+/)[0] || ''}
+    {#each arrDBParamsStatus as line (sixHash())}
+      {@const part = line.split(/\s+/)[0].trim() || ''}
       {#if line.includes('already exists')}
-        <input
-          type="checkbox"
-          value={part}
-          name="cbgroup"
-          style="display:inline-block;"
-          bind:group={selected}
-        />
-        <p>{line}</p>
-      {:else}
-        <p>{line}</p>
+        <label for={part} style='padding:0;margin:0;cursor:pointer;'>
+          <input
+            id={part}
+            type="checkbox"
+            value={part}
+            name="cbGroup"
+            disabled={part==='Role' && !cbGroup.includes('Database')}
+            style="display:inline-block;padding:0;margin:0;"
+            bind:group={cbGroup}
+          />
+          <p style='display:inine-block;padding:0;margin:0;'>{line}</p>
+        </label>
       {/if}
-      <br />
+      <!-- <br /> -->
     {/each}
-    {#if selected.length}
-      <button onclick={dropSelected} bind:this={deleteSelectedEl}
-        >delete selected</button
-      >
-    {/if}
+      <button onclick={dropSelected} style:color={cbGroup.length===0? 'gray':'skyblue'} style="margin-left:8rem;" disabled={cbGroup.length===0}>
+        drop selected
+      </button>
   </div>
 {/snippet}
 
@@ -554,21 +620,21 @@ Package Manager e.g. pnpm.
           </label>
         {/each}
         <div class="button-wrapper">
-          {#if dbStatusAvailable}
-            {@render dbParamsStatus()}
+          {#if existingDbParts && !paramsAreValid}
+            {@render shouldDeleteDbObjects()}
           {/if}
 
           <button
             class="toggle-status-button"
-            disabled={!dbStatusAvailable}
-            onclick={() => (dbStatusAvailable = !dbStatusAvailable)}
-            style="padding:6px 0.6rem;text-align:center;color:sienna;style:cursor;"
+            disabled={!validationMessage}
+            style="padding:6px 0.6rem;text-align:center;color:sienna;"
           >
             Toggle Status
           </button>
           <button
+            bind:this={verifyDbParamsEl}
             onclick={verifyDbParamsWithPostgres}
-            style="position:relative;padding:6px 0.5rem;text-align:center;color:sienna"
+            style="position:relative;margin-left:3px;padding:6px 0.5rem;text-align:center;color:sienna"
           >
             Verify Params with Postgres
           </button>
@@ -586,8 +652,10 @@ Package Manager e.g. pnpm.
       </div>
       {#key currentTask}
         <div class="current-task">
-          <span class:spinner={currentTask !== ''}></span>
-          {currentTask}
+          <span class:green-spinner={!currentTask.includes(prismaInitialized)}></span>
+          <p style="display:inline-block;" transition:fade={{ duration: 250 }}>
+            <span style='color:var(--green-type)'>{currentTask} {progressMsg}</span>
+          </p>
         </div>
       {/key}
     {/if}
@@ -615,11 +683,10 @@ Package Manager e.g. pnpm.
     </div>
     <div class="buttons-row">
       <button
-        bind:this={installPrismaButton}
         cLass="button-install"
         onclick={startPrismaInstall}
         onmouseenter={showMandatoryEntries}
-        onmouseleave={showMandatoryEntries}
+        // onmouseleave={showMandatoryEntries}
         disabled={dbParamsMissing}
       >
         <span class:spinner={isInstalling}></span>
@@ -647,7 +714,6 @@ Package Manager e.g. pnpm.
     </div>
   {/if}
 {/if}
-<button onclick={test} style="z-index:100;">test</button>
 
 <style lang="scss">
   .page-info {
@@ -693,7 +759,7 @@ Package Manager e.g. pnpm.
     @include button();
   }
   .spinner,
-  .spinner {
+  .green-spinner {
     display: inline-block;
     width: 1em;
     height: 1em;
@@ -701,8 +767,7 @@ Package Manager e.g. pnpm.
     border-top-color: #1b4891;
     border-radius: 50%;
     animation: spin 900ms linear infinite;
-  }
-
+}
   @keyframes spin {
     to {
       transform: rotate(360deg);
@@ -791,7 +856,7 @@ Package Manager e.g. pnpm.
   }
   .grid-container {
     position: absolute;
-    top: 0.5rem;
+    top: 1.3rem;
     left: 0;
     display: grid;
     grid-template-columns: repeat(2, 40vw);
@@ -855,7 +920,7 @@ Package Manager e.g. pnpm.
       position: absolute;
       top: 2rem;
       left: 0;
-      @include container($head: 'Database Parameters', $head-color: navy);
+      @include container($caption: 'Database Parameters');
       margin: 0;
       padding: 1rem;
       label {
@@ -914,7 +979,7 @@ Package Manager e.g. pnpm.
     position: absolute;
     top: 0;
     left: 0;
-    @include container($head: 'Database Params', $head-color: navy);
+    @include container($caption: 'Database Params');
     height: auto;
     color: var(--candidate-color);
     background-color: var(--candidate-bg-color);
@@ -932,7 +997,7 @@ Package Manager e.g. pnpm.
   }
   .cannot-remove-role {
     @include container(
-      $head: 'Not Allowed',
+      $caption: 'Not Allowed',
       $caption-color: tomato,
       $caption-background-color: cornsilk
     );
@@ -946,9 +1011,9 @@ Package Manager e.g. pnpm.
     // display: inline-block;
     .db-params-status {
       @include container(
-        $head: 'Database Parameters Status',
-        $head-color: navy,
-        $border: 2px solid gray
+        $caption: 'Delete Selected DB Objacts',
+        $border: 2px solid gray,
+        $padding:0.5rem 1rem
       );
       position: absolute;
       left: 0;
@@ -956,34 +1021,35 @@ Package Manager e.g. pnpm.
       margin-bottom: 8px;
       font-size: 14px;
       // color: var(--candidate-color);
-      background-color: var(--candidate-bg-color);
-      p {
+      // background-color: var(--candidate-bg-color);
+      p, input, span {
         display: inline-block;
-        margin: 0 0 0 0.5rem;
+        padding:0;
+        margin: 0;
         color: var(--candidate-color);
       }
-      input {
-        display: inline-block;
-      }
-      button {
-        margin-left: 8rem;
-      }
+      // button {
+      //   margin-left: 1rem;
+      // }
     }
+    
   }
 
-  .db-params-status {
-    @include container($head: 'Database Parameters Status', $head-color: navy);
+  .db-params-status{
+    @include container($caption: 'Delete Selected DB Objects');
     position: absolute;
     left: 0;
     bottom: 100%; /* Align bottom edge of container to top edge of button */
     margin-bottom: 8px; /* Spacing above button */
     width: max-content;
-    padding: 0.5rem 1rem;
+    // padding: 0.5rem 1rem;
     font-size: 12px;
-    background-color: navy;
-    color: lightgreen;
     white-space: nowrap;
     z-index: 10;
+    p{
+      padding:0 !important;
+      margin:0 !important;
+    }
   }
   .current-task {
     grid-column: span 3;

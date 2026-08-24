@@ -53,7 +53,7 @@ declare global {
     password?: string
   }
 
-  type TToggleFunc = (() => void) | undefined
+  type TCallbackFunc = (() => void) | undefined
   // type TPaths = Record<string, string>
   type DbParams = Record<string, string | number>
 

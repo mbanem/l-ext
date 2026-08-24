@@ -5,7 +5,7 @@ import { Client } from 'pg'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { runCommandStream } from './run-command-stream'
-import { CommandResultTracker, sleep, waitForNewFile } from './extension'
+import { CommandResultTracker, getVideoUris, sleep, waitForNewFile } from './extension'
 import { parsePrismaSchema } from './webview-ui/src/lib/utils/parse-prisma-schema.js'
 import { anyMissing } from './webview-ui/src/lib/utils'
 // import { kStringMaxLength } from 'node:buffer'
@@ -98,9 +98,8 @@ interface DropTarget {
   port?: number // optional, defaults to 5432
 }
 
-async function dropDatabaseAndRole(
-  target: DropTarget,
-): Promise<string | boolean> {
+async function dropDatabaseAndRole(target: DropTarget): Promise<string> {
+  console.log('[ormOne] dropDatabaseAndRole entry point')
   const { db, role, admin, password, host = 'localhost', port = 5432 } = target
 
   // Basic safety check
@@ -125,7 +124,9 @@ async function dropDatabaseAndRole(
     'postgres', // always connect to the maintenance DB
   ]
 
+  let returnMsg = 'Successfully dropped '
   try {
+    console.log('[ormOne] dropDatabaseAndRole step 1')
     // 1. Force-disconnect all sessions from the target database
     await execFileAsync(
       'psql',
@@ -142,6 +143,7 @@ async function dropDatabaseAndRole(
       { env },
     )
 
+    console.log('[ormOne] dropDatabaseAndRole step 2 drop db')
     // 2. Drop the database
     if (db) {
       await execFileAsync(
@@ -149,7 +151,10 @@ async function dropDatabaseAndRole(
         ['--if-exists', '-h', host, '-p', String(port), '-U', admin, db],
         { env },
       )
+      returnMsg += `Database ${db}`
+      console.log(`[ormOne] Successfully dropped database "${db}"`)
     }
+    console.log('[ormOne] dropDatabaseAndRole step 3 drop role')
     // 3. Drop the role
     if (role) {
       await execFileAsync(
@@ -157,14 +162,21 @@ async function dropDatabaseAndRole(
         [...commonArgs, '-c', `DROP ROLE IF EXISTS "${role}";`],
         { env },
       )
+      returnMsg += (returnMsg !== 'Successfully dropped '
+        ? ' and '
+        : '')
+        + `role ${role}`
+      console.log(
+        `[ormOne] dropDatabaseAndRole Successfully dropped role "${role}"`,
+      )
     }
-    console.log(`Successfully dropped database "${db}" and role "${role}"`)
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
-    console.error('Failed to drop database/role:', msg)
-    return msg
+    console.log('[ormOne] catch Failed to drop database/role:', msg)
+    returnMsg = `Failed to drop database/role: ${msg}`
   }
-  return true
+  console.log('[ormOne] returnMsg', returnMsg)
+  return returnMsg
 }
 // ====================== Main Entry ======================
 export async function setupOrmOneMessageHandler(
@@ -198,6 +210,7 @@ export async function setupOrmOneMessageHandler(
         }
       }
       if (savedFiles.has('schema.prisma') && savedFiles.has('.env')) {
+        console.log('[ormOne] onDidCloseTextDocument savedFiles has both')
         const { modelsOK, connOK } = await areSchemaAndEnvOK()
         if (modelsOK && connOK) {
           console.log('[ormOne] calling showPage OrmThree')
@@ -206,11 +219,13 @@ export async function setupOrmOneMessageHandler(
             page: 'OrmThree',
             from: 'ormOne',
           })
-          deletePendingFile()
+          deletePendingFile(paths.pending)
+          deletePendingFile(paths.notVerified)
           closeListener.dispose()
           saveListener.dispose()
         }
       } else {
+        console.log('[ormThree] onDidCloseTextDocument not modelsOK & connOK')
         const answer = await vscode.window.showWarningMessage(
           message,
           {
@@ -250,13 +265,14 @@ export async function setupOrmOneMessageHandler(
               command: 'SwitchToModelsHandler',
               message: 'Switching to Models Handler page..',
             })
-            console.log('[OrmThree] calling showPage OrmThree')
+            console.log('[OrmOnr calling showPage OrmThree')
+            await new Promise((resolve) => setTimeout(resolve, 300));
             webview.postMessage({
               command: 'showPage',
               page: 'OrmThree',
               from: 'ormOne',
             })
-            deletePendingFile()
+            deletePendingFile(paths.pending)
             closeListener.dispose()
             saveListener.dispose()
           }
@@ -302,7 +318,7 @@ export async function setupOrmOneMessageHandler(
   )
 
   context.subscriptions.push(saveListener, closeListener)
-
+console.log('[ormOne] estanlished listener and listen for messages')
   // ---------- Message listener ----------
   const messageListener = webview.onDidReceiveMessage(async (msg) => {
     switch (msg.command) {
@@ -310,34 +326,40 @@ export async function setupOrmOneMessageHandler(
         await handleCheckOnPendingFile()
         break
 
-      case 'prismaPartOne':
-        console.log('[ormOne] Received prismaPartOne message:', msg)
-        await handlePrismaPartOne(msg)
+      case 'installPrisma':
+        console.log('[ormOne] Received installPrisma message:', msg)
+        const result = await handleInstallPrisma(msg)
+        postMessage({
+          command: 'prismaInstallStatus',
+          result: result
+        })
 
         break
 
       case 'checkDbParams':
         const dbParams = JSON.parse(msg.dbParams)
-        const result = await getDbParamsStatus(dbParams)
-        console.log('[ormOne] dbParams & status', dbParams, result)
-        console.log('[ormOne] dbparamsStatus', result.stdout)
+        const res = await getDbParamsStatus(dbParams)
+        console.log('[ormOne] dbParams & status', dbParams, res)
+        console.log('[ormOne] dbParamsStatus', res.stdout)
         webview.postMessage({
           command: 'dbParamsStatus',
-          dbParamsStatus: result.stdout,
+          dbParamsStatus: res.stdout,
         })
         break
 
       case 'dropDbObjects':
         const commands = msg.commands
-        const db = JSON.parse(msg.dbParams)
+        const db_ = JSON.parse(msg.dbParams)
         console.log('[ormOne] dropDbObjects', msg)
+        const objects = msg.dropSelected.split(',')
+        let returnMsg = 'Successfully dropped '
 
-        const and = commands.length === 2 ? ' and ' : ''
-        let message = commands.includes('role') ? db.owner : ''
+        // const and = commands.length === 2 ? ' and ' : ''
+        // let message = commands.includes('role') ? db.owner : ''
+        // message += and + commands.includes('db') ? db.name : ''
 
-        message += and + commands.includes('db') ? db.name : ''
         const answer = await vscode.window.showWarningMessage(
-          message,
+          `You are about to drop ${msg.dropSelected}`,
           {
             modal: true,
             detail: 'This action is not recoverable',
@@ -345,27 +367,118 @@ export async function setupOrmOneMessageHandler(
           'Yes',
         )
         console.log('[ormOne] confirmation answer', answer)
-
+        let dropResult = ''
         if (answer === 'Yes') {
-          let success = dropDatabaseAndRole({
-            admin: db.adminName,
-            password: db.adminPwd,
-            db: commands.includes('db') ? db.name : '',
-            role: commands.includes('role') ? db.owner : '',
-            host: db.host,
-            port: db.port,
-          })
+          const {
+            db,
+            role,
+            admin,
+            password,
+            host = 'localhost',
+            port = 5432,
+          } = {
+            admin: db_.adminName,
+            password: db_.adminPwd,
+            db: msg.dropSelected.includes('Database') ? db_.name : '',
+            role: msg.dropSelected.includes('Role') ? db_.owner : '',
+            host: db_.host,
+            port: db_.port,
+          }
 
-          webview.postMessage({
-            command: 'deleteDbObject',
-            message: success,
-          })
-        } else {
-          webview.postMessage({
-            command: 'deleteDbObject',
-            message: 'Cancelled!',
-          })
+          // Basic safety check
+          const safeName = /^[a-zA-Z_][a-zA-Z0-9_]*$/
+          if ((db && !safeName.test(db)) || (role && !safeName.test(role))) {
+            throw new Error('Invalid database or role name')
+          }
+
+          const env = {
+            ...process.env,
+            PGPASSWORD: password,
+          }
+
+          const commonArgs = [
+            '-h',
+            host,
+            '-p',
+            String(port),
+            '-U',
+            admin,
+            '-d',
+            'postgres', // always connect to the maintenance DB
+          ]
+
+          try {
+            console.log('[ormOne] dropDatabaseAndRole step 1')
+            // 1. Force-disconnect all sessions from the target database
+            await execFileAsync(
+              'psql',
+              [
+                ...commonArgs,
+                '-c',
+                `
+        SELECT pg_terminate_backend(pid)
+        FROM pg_stat_activity
+        WHERE datname = '${db}'
+        AND pid <> pg_backend_pid();
+      `,
+              ],
+              { env },
+            )
+
+            console.log('[ormOne] dropDatabaseAndRole step 2 drop db')
+            // 2. Drop the database
+            if (db) {
+              await execFileAsync(
+                'dropdb',
+                [
+                  '--if-exists',
+                  '-h',
+                  host,
+                  '-p',
+                  String(port),
+                  '-U',
+                  admin,
+                  db,
+                ],
+                { env },
+              )
+              returnMsg += `Database ${db}`
+              console.log(`[ormOne] Successfully dropped database "${db}"`)
+            }
+            console.log('[ormOne] dropDatabaseAndRole step 3 drop role')
+            // 3. Drop the role
+            if (role) {
+              await execFileAsync(
+                'psql',
+                [...commonArgs, '-c', `DROP ROLE IF EXISTS "${role}";`],
+                { env },
+              )
+              returnMsg += returnMsg.includes('database')
+                ? ' and '
+                : '' + `role ${role}`
+              console.log(
+                `[ormOne] dropDatabaseAndRole Successfully dropped role "${role}"`,
+              )
+            }
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err)
+            console.log('[ormOne] catch Failed to drop database/role:', msg)
+            returnMsg = `Failed to drop database/role: ${msg}`
+          }
+          console.log('[ormOne] returnMsg', returnMsg)
+          // dropResult = await dropDatabaseAndRole({
+          //   admin: db.adminName,
+          //   password: db.adminPwd,
+          //   db: commands.includes('Database') ? db.name : '',
+          //   role: commands.includes('Role') ? db.owner : '',
+          //   host: db.host,
+          //   port: db.port,
+          // })
         }
+        webview.postMessage({
+          command: 'deleteDbObjectsResult',
+          message: returnMsg,
+        })
         break
       case 'approveBuildPackage':
         await runCommandStream('pnpm', ['approve-builds', msg.package], {
@@ -386,14 +499,14 @@ export async function setupOrmOneMessageHandler(
         break
     }
   })
-
+console.log('[ormOne] setupOrmMessageHandler result', result)
   return result
 }
 
 // ====================== Handlers ======================
 
 async function handleCheckOnPendingFile() {
-  if (fs.existsSync(paths.pending)) {
+  if (fs.existsSync(paths.pending) || fs.existsSync(paths.notVerified)) {
     const result = await openFilesInEditorTabs([paths.schema, paths.env])
     if (!result.success) {
       console.log('[ormOne] openFilesInEditorTabs failed', result)
@@ -402,20 +515,14 @@ async function handleCheckOnPendingFile() {
   }
 }
 let dbParams: any
-async function handlePrismaPartOne(
+async function handleInstallPrisma(
   msg: any,
 ): Promise<CommandResultTracker<boolean>> {
   const result = new CommandResultTracker<boolean>(true)
 
   try {
     dbParams = msg.dbParams ? JSON.parse(msg.dbParams) : null
-    // if (
-    //   !dbParams?.name ||
-    //   !dbParams?.owner ||
-    //   !dbParams?.password ||
-    //   !dbParams?.adminName ||
-    //   !dbParams?.adminPwd
-    // ) {
+
     if (anyMissing(dbParams)) {
       throw new Error('Missing required database parameters')
     }
@@ -461,7 +568,7 @@ async function handlePrismaPartOne(
 
     webview.postMessage({
       command: 'openFilesInEditor',
-      message: 'Opening schem.prisma and .env DATABASE_URL in Editor...',
+      message: 'Opening schema.prisma and .env DATABASE_URL in Editor...',
     })
 
     // 5. Open files + create pending flag
@@ -473,13 +580,13 @@ async function handlePrismaPartOne(
 
     webview.postMessage({
       command: 'prismaInstallSuccess',
-      message: 'Prisma initialized. Please review schema.prisma and .env',
+      message: 'Prisma ORM initialized. Please review schema.prisma and .env',
     })
 
     result.setSuccess(true)
   } catch (err: any) {
     const message = err.message || String(err)
-    console.error('[ormOne] handlePrismaPartOne error:', message)
+    console.error('[ormOne] handleInstallPrisma error:', message)
 
     webview.postMessage({
       command: 'prismaInstallError',
@@ -507,7 +614,7 @@ async function prismaMigrateAndGenarate() {
       message: 'schems.prisma is valid. Generating supporting modules...',
     })
     if (result.success) {
-      result = await executeCommand('pnom', args.generate)
+      result = await executeCommand('pnpm', args.generate)
     }
     if (!result.success) {
       console.log('[ormOne] prisma migrate and genarate failed')
@@ -734,10 +841,16 @@ function createPendingFile() {
 Delete this file after finishing the installation manually if needed.`
   fs.writeFileSync(paths.pending, text, 'utf-8')
 }
-
-function deletePendingFile() {
-  if (fs.existsSync(paths.pending)) {
-    fs.unlinkSync(paths.pending)
+function createPendingScemaVerified() {
+  const text = `Verification is pending until next extension start.
+  schema.prisma and/or DATABASE_URL from .env file are not verified.
+  User did not prepared schema.prisma yet and cancelled installation.
+  `
+  fs.writeFileSync(paths.notVerified, text, 'utf-8')
+}
+function deletePendingFile(filePath:string) {
+  if (fs.existsSync(filePath)) {
+    fs.unlinkSync(filePath)
   }
 }
 
@@ -745,6 +858,8 @@ async function openFilesInEditorTabs(
   filePaths: string[],
 ): Promise<CommandResultTracker<boolean>> {
   const result = new CommandResultTracker<boolean>(true)
+  // NOTE save flag file that schema and DATABASE_URL were not verified yet
+
   for (const p of filePaths) {
     const uri = vscode.Uri.file(p)
     let editor = await vscode.window.showTextDocument(uri, {
