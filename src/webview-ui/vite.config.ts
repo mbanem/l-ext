@@ -59,7 +59,7 @@ export default defineConfig({
     emptyOutDir: true,
     target: 'es2020',
     minify: 'esbuild',
-    sourcemap: true,
+    sourcemap: false,
     // When you ship the extension you can switch to sourcemap: false or 'hidden' for the final package.
     manifest: true,
 

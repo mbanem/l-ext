@@ -11,8 +11,7 @@
   } from '$lib/utils/toggle-theme'
 
   // type PageKey = 'OrmOne' |  'OrmThree'
-  type TImports =
-    typeof import('./OrmOne.svelte') | typeof import('./OrmThree.svelte')
+  type TImports = typeof import('./OrmOne.svelte') | typeof import('./OrmThree.svelte')
 
 
   const pages = {
@@ -94,22 +93,22 @@ so no page would be rendered
 -->
 
 <nav>
-  <span class="toggle-info-page" onclick={triggerPageInfo} aria-hidden={true}
+  <span class="toggle-info-page" onclick={triggerPageInfo} role='presentation'
     >About This {key} Page
   </span>
   <span
     class="toggle-info-page"
     onclick={() => key = 'OrmOne'}
-    aria-hidden={true}
+    role='presentation'
     >OrmOne
   </span>
   <span
     class="toggle-info-page"
     onclick={() => key = 'OrmThree'}
-    aria-hidden={true}
+    role='presentation'
     >OrmThree
   </span>
-  <p onclick={toggleTheme} aria-hidden={true}>
+  <p onclick={toggleTheme} role='presentation'>
     <span class="icon">{getIcon(theme)}</span>
   </p>
 </nav>

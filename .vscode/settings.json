@@ -21,12 +21,12 @@
   // ESLint settings
   "eslint.validate": ["javascript", "typescript", "svelte"],
   "eslint.format.enable": false, // Let Prettier handle formatting
-
-  // Optional but recommended
-  "[svelte]": {
-    "editor.defaultFormatter": "svelte.svelte-vscode"
-  },
   "[typescript]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
-  }
+  },
+  "[svelte]": {
+  "editor.defaultFormatter": "svelte.svelte-vscode",
+  "editor.formatOnSave": true
+}
+
 }

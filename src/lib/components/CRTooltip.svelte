@@ -389,7 +389,7 @@ CRTooltip could accept the following props, though all are optional
   class="child-wrapper"
   onmouseenter={toggle}
   onmouseleave={toggle}
-  aria-hidden={true}
+  role='presentation'
 >
   {@render handler()}
   {@render children?.()}

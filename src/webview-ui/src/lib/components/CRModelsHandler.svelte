@@ -2,12 +2,11 @@
 	import { tick, onMount } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
 	import { capitalize } from '$lib/utils';
-	import { showConfirmation } from '$lib/utils/event-handler.browser';
+	// import { showConfirmation } from '$lib/utils';
 	import Tooltip from './CRReactiveTooltip.svelte';
 	import CRUserRolesSelect from './CRUserRolesSelect.svelte';
 
 	let tooltip: Tooltip;
-
 
 	export type TProps = {
 		models: Models;
@@ -17,9 +16,17 @@
 	};
 
 	// Receive initial models from parent
-	let { models, selectedModels = $bindable({}), isLoading = $bindable(false), userRoles = [] }: TProps = $props();
+	let {
+		models = $bindable({}),
+		selectedModels = $bindable({}),
+		isLoading = $bindable(false),
+		userRoles = [],
+	}: TProps = $props();
 
-	console.log('[OrmThree] CRModelsHandler entry point')
+	let cbGroup = $state<string[]>([]);
+	let rbGroup = $state('');
+	let details = $state<HTMLDetailsElement[]>([]);
+	let lastHoveredDetails = $state<HTMLDetailsElement | undefined>(undefined);
 	// const modelsCopy: Models = structuredClone(models);
 	// for (const model of Object.values(modelsCopy)) {
 	// 	model.fields = model.fields.map((f) => (/password/i.test(f.name) ? { ...f, isDataEntry: true } : f));
@@ -28,285 +35,315 @@
 	function anySelected() {
 		return Object.keys(selectedModels).length > 0;
 	}
-	// Make it deeply reactive + owned by this component
-	// Works only between client components not from server to client component (not server->browser)
-	// let models = $state<Models>(structuredClone(initialModels)) // or just { ...initialModels } if shallow is enough
 
-	let tooltipBlockEl: HTMLDivElement;
+	let tooltipBlockEl = $state<HTMLDivElement>();
 	let emptyModel: Model = { fields: [], attrs: [] };
 	let includeAll = 'All'; // last word for models in CRRBTooltip -- here is 'Both'
 	let newModelName = $state('');
-	let isSummaryOpen = $state(false);
+	let newModelNameCap = $derived(capitalize(newModelName));
+	// let isSummaryOpen = $state(false);
 	let extraModels = new SvelteSet<string>();
+	let extraModelsSize = $derived([...extraModels].length);
 	let notDataEntryEl: HTMLDivElement;
 	let modelWrapperEl: HTMLDivElement;
 	let hoveredEl: HTMLElement | null = null;
 
-	const notDataEntry = 'not data entry field';
-	const clickToRemove = 'click to remove';
-	let tooltipMessage = $state(notDataEntry);
-	let det: HTMLDetailsElement;
-	let fieldsRect: DOMRect;
+	let tooltipMessage = $state('not data entry field');
+	// const clickToRemove = 'click to remove';
+	let fieldsRect = $state<DOMRect | undefined>(undefined);
 	const defaultMessage = 'Add/Remove extra model like Login, Admin,...';
-	const alreadyDefined = 'Model is already registered';
-	const notRegistered = 'Model is not registered yet';
+	const alreadyDefined = 'Module is already registered';
+	const notRegistered = 'Module is not registered yet';
 	const noModelName = 'Please enter model name';
 	let modelName = $state('');
-	let openDetailsEl = $derived((document.getElementById(modelName) as HTMLDivElement) || undefined);
 	let message = $state(defaultMessage);
 	let messageColor = $derived(message === defaultMessage ? '' : 'color:tomato;');
-	let busy = $state(false);
-	let timer: ReturnType<typeof setTimeout> | null = null;
+	// let timer: ReturnType<typeof setTimeout> | null = null;
 	const nuiRegex = new RegExp(`\\b@id|@defaults|@updatedAt|@unique\\b`, 'g');
 
-	export const exportModels = () => {
+	export const exportModels = async () => {
+		// log('exportModels')
 		selectedModels = {};
-		// get only selected models based on the checkbox checked state
-		for (const chkbox of modelWrapperEl.querySelectorAll('input[type="checkbox"]:checked')) {
-			try {
-				const routeName = ((chkbox as HTMLInputElement).previousElementSibling as HTMLInputElement).value as string;
-
-				const modelName = (chkbox as HTMLInputElement).value as string;
-				const permissions = models[modelName]?.permissions as string;
-				if (!selectedModels[routeName]) {
-					(selectedModels[routeName] as Model) = { fields: [] };
-				}
-				selectedModels[routeName][modelName] = {
+		await tick();
+		for (const modelName of cbGroup) {
+			const routeName = (modelWrapperEl.querySelector(`#route${modelName}`) as HTMLInputElement).value;
+			const permissions = models[modelName]?.permissions as string;
+			if (!selectedModels[routeName]) {
+				selectedModels[routeName] = {};
+				(selectedModels[routeName] as SelectedModel)[modelName] = {
 					routeName,
 					permissions,
 				};
-			} catch (err: unknown) {
-				const msg = err instanceof Error ? err.message : String(err);
-				console.log(msg);
 			}
 		}
+		console.log('# of selectedModels',Object.keys(selectedModels).length)
 	};
-	function killTimeout() {
-		if (timer) {
-			clearTimeout(timer);
-			timer = null;
-		}
-	}
 	function fieldAttrsClass(field: Field) {
-		return nuiRegex.test(field.attrs as string) ? 'attr-id' : '';
+		try {
+			return nuiRegex.test(field.attrs as string) ? 'attr-id' : '';
+		} catch (err: unknown) {
+			handleTryCatch(err, 'fieldAttrsClass');
+		}
 	}
 	function fieldAttrs(field: Field) {
 		return field.attrs ?? 'no attributes';
 	}
-	function toggleCheckboxes(e: MouseEvent) {
-	
+	function toggleSelectAllModels(e: MouseEvent) {
 		const el = e.target as HTMLParagraphElement;
 		const newState = el.innerText.includes('select all') ? true : false;
+		cbGroup = [];
+		if (newState) {
+			for (const modelName of Object.keys(models)) {
+				cbGroup.push(modelName);
+			}
+		}
 		el.innerText = newState ? '(clear all)' : '(select all)';
-		(document.querySelectorAll('.model-checkboxes') as unknown as Array<HTMLInputElement>).forEach(async (chkbox) => {
-			chkbox.click();
-			await tick();
-		});
 		setTimeout(() => {
 			exportModels();
 		}, 400);
 	}
-
 	function getUIField(fieldName: string) {
-		if (/password/i.test(fieldName)) {
-			return {
-				name: 'password',
-				isDataEntry: true,
-				isOptional: false,
-				isArray: false,
-				attrs: 'saved excrypted',
-			} as Field;
-		}
-
-		return models[modelName]?.fields.find((field) => field.name === fieldName) as Field;
+		console.log('getUIField', modelName, fieldName, models[modelName].fields)
+		const fld = models[modelName].fields.find((field) => field.name === fieldName) as Field;
+		console.log('getUIField', fld)
+		return fld;
 	}
 
-	// // called from tooltipBlockEl tooltip when radio button fires change event
-	function addFieldToModel(e: Event) {
+	// called from tooltipBlockEl tooltip when radio button fires change event
+	async function addFieldToModel(e: MouseEvent) {
+		// e.preventDefault()
+		const rb = e.target as HTMLInputElement
+		rbGroup = rb.value
+		console.log('addFieldToModel entry point', modelName, rbGroup);
 		try {
-			e.preventDefault();
-			killTimeout();
-			if (!hoveredEl) {
+			// killTimeout();
+			if (!hoveredEl || !tooltipBlockEl) {
+				console.log('no hoveredEl or tooltipBlockEl')
 				return;
 			}
+			await tick();
+			if (rbGroup==='') {
+				console.log('no rbGroup')
+				return;
+			}
+
 			const fieldName = hoveredEl?.innerText as string;
-			const mName = (tooltipBlockEl.querySelector(`input[type=radio]:checked`) as HTMLInputElement).value as string;
-			if (!(mName === includeAll || extraModels.has(mName))) {
-				return;
-			}
+			console.log('addFieldToModel hoveredEl fieldName', hoveredEl, fieldName)
 			const field = getUIField(fieldName);
+			console.log('addFieldToModel', modelName, field.name, field)
 			if (field) {
-				if (mName === includeAll) {
+				// if (/password/i.test(field.name)) {
+				// 	field.name = 'password';
+				// }
+				if (rbGroup === includeAll) {
 					for (const m of extraModels) {
-						if (models[m] && !models[m].fields.includes(field)) {
-							models[m].fields.push(field);
+						console.log('extraModel m',m, models[m])
+						if (!models[m]?.fields.includes(field)) {
+							models[m]?.fields.push(field);
 						}
 					}
 				} else {
-					if (!models[mName]?.fields.includes(field)) {
-						models[mName]?.fields.push(field);
+					console.log('models[rbGroup]', rbGroup, models[rbGroup])
+					if (!models[rbGroup]?.fields.includes(field)) {
+						models[rbGroup]?.fields.push(field);
 					}
 				}
 			}
+			rbGroup = '';
 			// after adding the field to a model clear selected
 			// radio button and hide the radio button tooltip
-			(e.target as HTMLInputElement).checked = false;
-			tooltipBlockEl.style.opacity = '0';
+			// (e.target as HTMLInputElement).checked = false;
+			// (tooltipBlockEl as HTMLDivElement).style.opacity = '0';
+			(tooltipBlockEl as HTMLDivElement).classList.add('hidden');
 		} catch (err: unknown) {
 			const msg = err instanceof Error ? err.message : String(err);
-			console.log('addFieldToModel', msg);
+			console.log('catch/addFieldToModel', msg);
 		}
 		if (anySelected()) {
 			exportModels();
 		}
 	}
-
-	function isInside(e: MouseEvent, el: HTMLElement | DOMRect) {
-		let rect: DOMRect = el as DOMRect;
-		if (el instanceof HTMLElement) {
-			console.log('[OrmThree] isInside', el);
-			rect = el.getBoundingClientRect() as DOMRect;
-		}
-		function between(left: number, right: number, middle: number) {
-			return left <= middle && middle <= right;
-		}
-		return between(rect.left, rect.right, e.clientX) && between(rect.top, rect.bottom, e.clientY);
+	function isBetween(p:number, min:number, max:number){
+		return p>=min && p<=max
 	}
 
-	function showNoDataEntry(x: number, y: number) {
-		killTimeout();
-		hoveredEl = null;
-		tooltipBlockEl.style.opacity = '0';
-		Object.assign(notDataEntryEl.style, {
-			position: 'fixed',
-			top: `${y - 15}px`,
-			left: `${x}px`,
-			zIndex: '9999',
-			pointerEvents: 'auto',
-			opacity: '1',
-		});
+	function isInside(e: MouseEvent) {
+		const r = fieldsRect as DOMRect	// as defined DOMRect | undefined
+		if(!r){
+			return true
+		}
+		return isBetween(e.clientX, r.left, r.right) && isBetween(e.clientY, r.top, r.bottom);
 	}
 
-	async function showTooltip(e: MouseEvent) {
-		// e.preventDefault()
-		killTimeout();
-		timer = null;
-		console.log('[OrmThree] showTooltip', e);
-		if (isInside(e, openDetailsEl)) {
-			if (!extraModels.size) {
-				return;
-			}
-			tooltipBlockEl.style.opacity = '0';
-		}
-
-		if ((e.target as HTMLElement).tagName !== 'SECTION' && isInside(e, openDetailsEl)) {
-			tooltipBlockEl.style.opacity = '0';
+	function hideCopyFieldTooltip(e:MouseEvent){
+		console.log('hide tooltip');
+		// (tooltipBlockEl as HTMLDivElement).style.opacity = '0';
+		(tooltipBlockEl as HTMLDivElement).classList.add('hidden')
+	}
+	
+	function showCopyFieldTooltip(e: MouseEvent) {
+		e.preventDefault();
+		if (!extraModelsSize || !isInside(e)) {
 			return;
 		}
-		if (e.type === 'mouseenter') {
-			// offer no copy field to extra model(s) as no extra models are defined
-			if (extraModels.size === 0) {
-				return;
-			}
-			// there are extra data models for radio-button block to offer copy field
-			const dataset = (e.target as HTMLElement).dataset;
-			const { x, y } = (e.target as HTMLElement).getBoundingClientRect();
+		// (tooltipBlockEl as HTMLDivElement).style.opacity = '0';
+		(tooltipBlockEl as HTMLDivElement).classList.add('hidden')
+		const el = e.target as HTMLElement;
+		
+		const dataset = (e.target as HTMLElement).dataset;
+		if (dataset.entry === 'false' && !/password/i.test(el.innerText)) {
+			return;
+		}
 
-			// not a data entry field so no radio-block but info no-dataa-entry
-			// or remove field if extraModel field is hovered
-			if (dataset.entry === 'false' || dataset.extra === 'true') {
-				if (dataset.entry === 'false') {
-					tooltipMessage = notDataEntry;
-				} else {
-					tooltipMessage = clickToRemove;
-				}
-				showNoDataEntry(x, y);
-				return;
-			}
-			hoveredEl = e.target as HTMLElement;
-			timer = setTimeout(() => {
-				busy = false;
-			}, 100);
-			busy = true;
-			Object.assign(tooltipBlockEl.style, {
+		let { x, y } = el.getBoundingClientRect();
+		if (extraModels.has(modelName)) {
+			x = x + 60;
+			tooltip.showTooltip({ x, y }, 'click to remove', 1000, 'above', {
+				color: 'crimson',
+				backgroundColor: '#fff0f0',
+				border: '1px solid crimson',
+				padding:'1px 10px',
+			});
+		} else {
+			// hoveredEl = (e.target as HTMLElement).firstElementChild as HTMLElement;
+			Object.assign((tooltipBlockEl as HTMLDivElement).style, {
 				position: 'fixed',
-				top: `${y - 8}px`,
+				top: `${y}px`,
 				left: `${x}px`,
 				zIndex: '9999',
 				pointerEvents: 'auto',
-				opacity: '1',
+				display: 'inline-block',
 				cursor: 'pointer',
 			});
-		} else {
-			if (busy) {
-				return;
-			}
-			tooltipBlockEl.style.opacity = '0';
-			notDataEntryEl.style.opacity = '0';
 		}
 	}
-	async function toggleSummary(e: MouseEvent) {
-		// e.preventDefault();
-		const el = e.target as HTMLElement;
+
+	function toggleListeners(addOrRemove: boolean) {
+		if (!lastHoveredDetails) {
+			console.log('no lastHoveredDetails')
+			return;
+		}
+		// console.log('toggleListeners', addOrRemove);
+		// lastHoveredDetails is set before calling this function
+		const sections = (lastHoveredDetails as HTMLDetailsElement).querySelectorAll<HTMLElement>('section');
+
+		// Pick the method name based on the boolean flag
+		const method: 'addEventListener' | 'removeEventListener' = addOrRemove ? 'addEventListener' : 'removeEventListener';
+
+		sections.forEach((section) => {
+			section[method]('mouseenter', showCopyFieldTooltip as EventListener);
+		});
+	}
+
+	// if details isOpen and extraModels defined add listeners for mouseenter/mouseleave
+	// for copy field tooltip to appeat over field names in details model block
+	async function handleContainerMouseOver(e: MouseEvent) {
+		e.preventDefault();
+		// (tooltipBlockEl as HTMLDivElement).style.opacity = '0';
+		(tooltipBlockEl as HTMLDivElement).classList.add('hidden')
+		if (!extraModelsSize) {
+			// console.log('handleContainerMouseOver exit no extraModels')
+			return;
+		}
+
+		// mouse is hovering over the frid, but if out of the first column
+		// hide the copy field tooltip
+		if (fieldsRect && !isInside(e)) {
+			// (tooltipBlockEl as HTMLDivElement).style.opacity = '0';
+			return;
+		}
+
+		const target = e.target as HTMLElement;
+		if (!target) {
+			// console.log('handleContainerMouseOver exit no e.target')
+			return;
+		}
+		await tick();
+		hoveredEl = target;
+		console.log('handleContainerMouseOver hoveredEl', hoveredEl.innerText.slice(0,50));
+		// Find the closest details ancestor from the hover target
+		const details = target.closest('details');
+
+		// Check if we are over an open details block and haven't already processed it
+		if (details) {
+			if (details.open && details !== lastHoveredDetails) {
+				lastHoveredDetails = details;
+				console.log('set lastHoveredDetails', (lastHoveredDetails?.firstElementChild as HTMLElement).innerText)
+				toggleListeners(true);
+			}
+		} else {
+			// toggleListeners(false);
+			lastHoveredDetails = undefined; // Reset when hovering outside any details>
+			console.log('clear lastHoveredDetails')
+		}
+	}
+
+	async function closeOtherDetails(det: HTMLDetailsElement) {
+		const openDetails = details.filter((det) => det.open);
+		openDetails.forEach((openDet) => {
+			// console.log('openDet', openDet)
+			if (openDet.open && openDet !== det) {
+				openDet.open = false;
+			}
+		});
+	}
+	// this should set mouseenter/mouseleave on the first column
+	// of the ORM Models fieldNames
+	async function toggleDetails(e: ToggleEvent) {
+		// e.preventDefault();	// will not toggle open/close if prevented
+		const det = e.currentTarget as HTMLDetailsElement;
+		const el = det.firstElementChild as HTMLElement;
+		console.log('det.open', det.open, el.innerText)
+		// det.open = !det.open
+		await tick(); // give DOM time to toggle open/close state
+		let fldName = '';
+		// modelName = el.tagName
 		switch (el.tagName) {
 			case 'SUMMARY':
-				det = el.closest('details') as HTMLDetailsElement;
-				if (!det || det.tagName !== 'DETAILS') {
-					console.log('[ModelsHandler] no closest details found')
-					return;
-				}
-				tooltipBlockEl.style.opacity = '0';
-				modelName = det.innerText?.match(/^\S+/)?.[0] as string;
-				console.log('[OrmThree] toggleSummary modelName', modelName);
-				console.log('[OrmThree] toggleSummary div modelName:', document.getElementById(modelName));
-				if (extraModels.has(modelName)) {
-					fieldsRect = (el.parentElement as HTMLElement)
-						.querySelector('.cr-fields-column')
-						?.getBoundingClientRect() as DOMRect;
-				}
-				for (const item of modelWrapperEl.getElementsByTagName('DETAILS')) {
-					if (item.firstChild !== el) {
-						Object.assign((item.parentElement as HTMLElement).style, {
-							opacity: `${isSummaryOpen ? '1' : '0'}`,
-							position: `${isSummaryOpen ? 'relative' : 'absolute'}`,
-							top: '0',
-							left: '0',
-						});
-					}
-				}
-				isSummaryOpen = !isSummaryOpen;
-				console.log('[ModelsHandler] details wrapper NOW isSummaryOpen?',isSummaryOpen)
-				// hovering is necessary only when newModels is not empty
-				if (!extraModels.size) {
-					console.log('[ModelsHandler] no extraModels -- return')
-					return;
-				}
 				if (det.open) {
-					if (modelWrapperEl.onmouseenter) {
-						modelWrapperEl.removeEventListener('mouseenter', showTooltip);
-						modelWrapperEl.removeEventListener('mouseleave', showTooltip);
-					}
+					closeOtherDetails(det);
+					toggleListeners(true);
+					// return;
 				} else {
-					if (!modelWrapperEl.onmouseenter) {
-						modelWrapperEl.addEventListener('mouseenter', showTooltip);
-						modelWrapperEl.addEventListener('mouseleave', showTooltip);
-					}
+					toggleListeners(false);
 				}
+				modelName = det.innerText?.match(/^\S+/)?.[0] as string;
+				if (tooltipBlockEl) {
+					// (tooltipBlockEl as HTMLDivElement).style.opacity = '0';
+					(tooltipBlockEl as HTMLDivElement).classList.add('hidden')
+				}
+				await tick();
+				console.log('toggleDetails modelName set', modelName);
+
+				if (extraModels.has(modelName)) {
+					// <div holding all <sections with fieldNames with data-entry and data-extra boolean flags
+					fieldsRect = document.getElementById(modelName)?.getBoundingClientRect() as DOMRect;
+					console.log('toggleDetails fieldsRect', fieldsRect)
+				}
+				await closeOtherDetails(det);
+				// isSummaryOpen = !isSummaryOpen;
+				// hovering is necessary only when newModels is not empty
+				if (!extraModelsSize) {
+					console.log('no extraModels no copyField tootip')
+					return;
+				}
+				await handleContainerMouseOver(e);
 				return;
 			case 'INPUT':
 				if ((el as HTMLInputElement).type && (el as HTMLInputElement).type === 'checkbox') {
+					// console.log('[OrmThree] toggleDetails checkbox exportModels')
 					exportModels();
 				}
+				break;
+			case 'SECTION':
+				fldName = el.innerText;
+				models[modelName]!.fields = models[modelName]?.fields.filter((field) => field.name !== fldName) as Field[];
 				break;
 			case 'SPAN':
 			case 'P':
 			default:
-				break;
+				console.log('[OrmThree] toggleDetails defauls case', el.tagName);
 		}
-	}
-
-	function hideTooltipBlock() {
-		killTimeout();
 	}
 
 	function showInputMessage(
@@ -320,23 +357,32 @@
 		}, milisec);
 	}
 
-	async function addNewModel(e: MouseEvent | KeyboardEvent) {
-		if (e instanceof KeyboardEvent && e.key !== 'Enter') {
-			return;
+	async function addNewModel(e: MouseEvent | KeyboardEvent | undefined) {
+		if (e) {
+			e?.preventDefault();
+			if (e instanceof KeyboardEvent && e.key !== 'Enter') {
+				return;
+			}
+			// (tooltipBlockEl as HTMLDivElement).style.opacity = '0';
+			(tooltipBlockEl as HTMLDivElement).classList.add('hidden')
 		}
-		tooltipBlockEl.style.opacity = '0';
-		const model = capitalize(newModelName);
 
-		if (models[model]) {
-			showInputMessage(alreadyDefined)
+		// console.log('[OrmThree] addNewModel', newModelNameCap);
+		if (models[newModelNameCap]) {
+			showInputMessage(alreadyDefined);
 			return;
 		}
 		await tick();
 
-		extraModels.add(model);
-		// add another model initially with no fields and attrs
+		extraModels.add(newModelNameCap);
+		// add another newModelNameCap initially with no fields and attrs
 		// so the models list can expand
-		models[model] = emptyModel;
+		models = {
+			...models,
+			[newModelNameCap]: emptyModel,
+		};
+		// console.log('[OrmThree] addNewModel extraModels', extraModels);
+		// console.log('[OrmThree] addNewModel models', models);
 		newModelName = '';
 		if (anySelected()) {
 			exportModels();
@@ -344,42 +390,26 @@
 	}
 
 	async function deleteModel(e: MouseEvent, modelName: string) {
-		tooltip.showTooltip(
-			e, 
-			`Model "${modelName}" to be removed.`, 
-			3000, 
-			'above', 
-			{
-				color: 'crimson',
-				backgroundColor: '#fff0f0',
-				border: '1px solid crimson',
-			},
-		);
-		const confirmed = await showConfirmation({
-			message: `Remove model "${modelName}"?`,
-			detail: 'This action cannot be undone.',
-			confirmText: 'Yes, Remove',
-			cancelText: 'Cancel',
+		tooltip.showTooltip(e, `Model "${modelName}" to be removed.`, 2000, 'right', {
+			color: 'crimson',
+			backgroundColor: '#fff0f0',
+			border: '1px solid crimson',
 		});
+		// const confirmed = await showConfirmation({
+		const confirmed = true;
 		if (confirmed) {
 			delete models[modelName];
 			if (models[modelName]) {
-				tooltip.showTooltip(
-					e, 
-					`Model "${modelName}" has been removed.`, 
-					3000, 
-					'above', {
-					backgroundColor: 'black',
-					color: 'lightgreen',
+				tooltip.showTooltip(e, `Model "${modelName}" has been removed.`, 2000, 'left', {
+					color: 'crimson',
+					backgroundColor: '#fff0f0',
+					border: '1px solid crimson',
 				});
 			} else {
-				tooltip.showTooltip(
-					e, 
-					`Model "${modelName}" is removed.`, 
-					3000, 'above', 
-					{
-					backgroundColor: 'black',
-					color: 'lightgreen',
+				tooltip.showTooltip(e, `Model "${modelName}" is removed.`, 2000, 'above', {
+					color: 'crimson',
+					backgroundColor: '#fff0f0',
+					border: '1px solid crimson',
 				});
 			}
 			setTimeout(() => {
@@ -388,23 +418,22 @@
 		}
 	}
 	async function removeModel(e: MouseEvent) {
-
 		if (!newModelName) {
 			showInputMessage(noModelName);
 			return;
 		}
-		const model = capitalize(newModelName);
 
-		if (!models[model]) {
-			showInputMessage(notRegistered)
+		if (!models[newModelNameCap]) {
+			showInputMessage(notRegistered);
 			return;
 		}
-		if (models[model]) {
-			deleteModel(e, model);
+		if (models[newModelNameCap]) {
+			await deleteModel(e, newModelNameCap);
 			// Optional: notify user inside webview
-			tooltip.showTooltip(e, `Model "${modelName}" has been removed.`, 3000, 'above', {
-				backgroundColor: 'black',
-				color: 'lightgreen',
+			tooltip.showTooltip(e, `Model "${newModelNameCap}" has been removed.`, 2000, 'left', {
+				color: 'crimson',
+				backgroundColor: '#fff0f0',
+				border: '1px solid crimson',
 			});
 		}
 		setTimeout(() => {
@@ -412,81 +441,83 @@
 		}, 400);
 	}
 
-	function hideClickToRemove(e: MouseEvent) {
-		e.preventDefault();
-		if (!isInside(e, fieldsRect)) {
-			notDataEntryEl.style.opacity = '0';
-		}
-	}
-	function removeExtraModelField(e: MouseEvent) {
-		if(Object.keys(models).includes(modelName) ){
-			return
-		}
-		const el = e.target as HTMLElement;
-		console.log('[OrmThree] CRMOdelsHandler removeExtraModelField', el)
-	
-		const fieldName = el.innerText;
-		const model = models[modelName];
-		if (!model || !model.fields) {
-			return;
-		}
-		model.fields = model.fields.filter((field) => field.name !== fieldName);
-		notDataEntryEl.style.opacity = '0';
-		if (anySelected()) {
-			exportModels();
-		}
-	}
+	// function hideClickToRemove(e: MouseEvent) {
+	// 	e.preventDefault();
+	// 	if (!isInside(e, fieldsRect)) {
+	// 		notDataEntryEl.style.opacity = '0';
+	// 	}
+	// }
+	// function removeExtraModelField(e: MouseEvent) {
+	// 	const el = e.target as HTMLElement;
+	// 	// console.log('removeExtraModelField dataset.extra', el.dataset.extra)
+	// 	if (el.dataset.extra === 'false') {
+	// 		// console.log('removeExtraModelField exit -- not an extraModel')
+	// 		return;
+	// 	}
+	// 	const fieldName = el.innerText;
+	// 	// console.log('[OrmThree] removeExtraModelField', fieldName);
+	// 	const model = models[modelName];
+	// 	if (!model || !model.fields) {
+	// 		return;
+	// 	}
+	// 	model.fields = model.fields.filter((field) => field.name !== fieldName);
+	// 	notDataEntryEl.style.opacity = '0';
+	// 	if (anySelected()) {
+	// 		exportModels();
+	// 	}
+	// }
 
 	// TODO remove  this it is for testing
-	// function addExtraModels() {
-	// 	console.log('[OrmThree] CRModelHandler addExtraModels entry point');
-	// 	extraModels.add('login');
-	// 	odels['login'] = emptyModel;
-	// 	extraModels.add('admin');
-	// 	models['admin'] = emptyModel;
-	// }
+	async function addExtraModels() {
+		const modelNames = ['login', 'admin', 'customer', 'login'];
+		for (const model of modelNames) {
+			// console.log('[OrmThree] addExtraModels', model);
+			newModelName = model;
+			await tick();
+			addNewModel(undefined);
+			await tick();
+		}
+	}
 	onMount(() => {
-		console.log('[OrmThree] onMmount entry point');
-		tooltipBlockEl.classList.remove('hidden');
+		(tooltipBlockEl as HTMLDivElement).classList.remove('hidden');
 		notDataEntryEl.classList.remove('hidden');
-		tooltipBlockEl.addEventListener('change', addFieldToModel);
-		tooltipBlockEl.addEventListener('mouseleave', hideTooltipBlock);
+		// (tooltipBlockEl as HTMLDivElement).addEventListener('mouseleave', hideTooltipBlock);
 
-		console.log('does detailsUser div exists', document.getElementById('detailsUser'));
-		// setTimeout(() => {
-		// 	console.log('[OrmThree] CRModelHandler timeout add extra models');
-		// 	addExtraModels();
-		// }, 2000);
-		return () => {
-			modelWrapperEl.removeEventListener('change', addFieldToModel);
-			tooltipBlockEl.removeEventListener('mouseleave', hideTooltipBlock);
-		};
+		setTimeout(() => {
+			// console.log('[OrmThree] CRModelHandler timeout add extra models');
+			addExtraModels();
+		}, 500);
+
+		// return () => {
+		// 	(tooltipBlockEl as HTMLDivElement).removeEventListener('mouseleave', hideTooltipBlock);
+		// };
 	});
 </script>
+{#snippet tooltipBlock()}
+	<div>
+		{#each extraModels as model (model)}
+			<label><input type="radio" bind:group={rbGroup} value={model} onclick={addFieldToModel}/>{model}</label>
+		{/each}
+		{#if extraModelsSize >= 2}
+			<label><input type="radio" bind:group={rbGroup} value="All" onclick={addFieldToModel}/>{extraModelsSize === 2 ? 'Both' : 'All'}</label>
+		{/if}
+	</div>
+{/snippet}
 
-<div bind:this={tooltipBlockEl} class="radio-tooltip hidden">
+<div bind:this={tooltipBlockEl} class="radio-tooltip">
 	{@render tooltipBlock()}
 </div>
-<div bind:this={notDataEntryEl} class="no-data-entry hidden">
+<div bind:this={notDataEntryEl} class="no-data-entry">
 	{tooltipMessage}
 </div>
 
 {#snippet permissions(modelName: string)}
-	<CRUserRolesSelect {userRoles} {modelName} bind:models {exportModels} />
-{/snippet}
-{#snippet tooltipBlock()}
-	{#each extraModels as model (model)}
-		<label><input type="radio" name={model} value={model} />{model}</label>
-	{/each}
-	{#if extraModels.size === 2}
-		<label><input type="radio" name="All" value="All" />Both</label>
-	{/if}
-	{#if extraModels.size > 2}
-		<label><input type="radio" name="All" value="All" />All</label>
-	{/if}
+	<CRUserRolesSelect {userRoles} {models} {modelName} {exportModels} />
 {/snippet}
 
-{#snippet summaryDetailsModel(modelName: string, model: Model)}
+{#snippet summaryDetailsModel(modelName: string, ix: number)}
+	<!-- Dynamically derive current model state inside snippet -->
+	{@const modely = models[modelName] as Model}
 	<div style="position:relative;">
 		<input
 			type="text"
@@ -495,23 +526,38 @@
 			onchange={exportModels}
 			style="position:absolute;top:0;left:4px;color:var(--candidate-color);background-color:var(--candidate-bg-color);width:5rem;height:1rem;padding:0 0 0 5px;margin:4px 0 0 0;border:none;font-size:14px;"
 		/>
-		<input type="checkbox" style="position:absolute;top:0;left:6rem;" value={modelName} class="model-checkboxes" />
-		<details class="model-details">
+		<input
+			type="checkbox"
+			style="position:absolute;top:0;left:6rem;"
+			value={modelName}
+			bind:group={cbGroup}
+			class="model-checkboxes"
+			onclick={exportModels}
+		/>
+		<details bind:this={details[ix]} ontoggle={toggleDetails} class="model-details" onfocus={() => {}}
+				onblur={() => {}}
+				role="presentation">
 			<summary class="cr-model-name">
 				{capitalize(modelName)}
 				{@render permissions(modelName)}
 			</summary>
 
-			<div
-				id={modelName}
-				class="cr-fields-column"
-				onmouseleave={extraModels.has(modelName) ? hideClickToRemove : undefined}
-				onclick={removeExtraModelField}
-				aria-hidden={true}
+			<!-- <div id={modelName} class="cr-fields-column" onclick={removeExtraModelField} aria-hidden={true}> -->
+			<div id={modelName} class="cr-fields-column" onmouseover={handleContainerMouseOver}
+				// onmouseout={handleContainerMouseOver}
+				onfocus={() => {}}
+				onblur={() => {}}
+				role="presentation"
 			>
-				{#each model.fields as field (field.name)}
+				{#each modely.fields as field (field.name)}
 					{@const attrClass = fieldAttrsClass(field) as string}
-					<section data-entry={field.isDataEntry} data-extra={extraModels.has(modelName)}>
+					<section
+						data-entry={field.isDataEntry}
+						data-extra={extraModels.has(modelName)}
+						// onmouseenter={showTooltip}
+						// onmouseleave={extraModels.has(modelName) ? hideClickToRemove : undefined}
+						aria-hidden={true}
+					>
 						{field.name}
 					</section>
 					<p>
@@ -520,7 +566,7 @@
 				{/each}
 			</div>
 			<div>
-				{#each model.attrs as attr (attr)}
+				{#each modely.attrs as attr (attr)}
 					<p class="cr-model-attr">{attr}</p>
 				{/each}
 			</div>
@@ -529,14 +575,24 @@
 {/snippet}
 
 {#snippet summaryDetailsModels()}
-	{#each Object.entries(models) as [modelName, model] (modelName)}
-		{@render summaryDetailsModel(modelName, model)}
-	{/each}
+	<div
+		class="model-wrapper"
+		// onmouseover={handleContainerMouseOver}
+		// onmouseout={handleContainerMouseOver}
+		// onfocus={() => {}}
+		// onblur={() => {}}
+		// role="presentation"
+	>
+		{#each Object.entries(models) as [modelName], ix (modelName)}
+			{@render summaryDetailsModel(modelName, ix)}
+		{/each}
+	</div>
 {/snippet}
+
 <div class="container">
-	<div class="schema-container" onclick={toggleSummary} aria-hidden={true}>
+	<div class="schema-container">
 		<p class="orm-models-caption">ORM Models -- Table Names</p>
-		<p class="select-all" onclick={toggleCheckboxes} aria-hidden={true}>(select all)</p>
+		<p class="select-all" onclick={toggleSelectAllModels} aria-hidden={true}>(select all)</p>
 		<div bind:this={modelWrapperEl} class="model-wrapper">
 			{#if isLoading}
 				<div class="spinner-wrapper">
@@ -557,9 +613,9 @@
 		>
 	</div>
 </div>
-<!-- <p>modelName {modelName}</p> -->
-<!-- no display just a showMessage utils with markup -->
-<Tooltip bind:this={tooltip} />
+
+<!-- not for display just a showMessage utils with markup -->
+<Tooltip bind:this={tooltip}/>
 
 <style lang="scss">
 	*,
@@ -802,5 +858,10 @@
 	}
 	.hidden {
 		display: none;
+	}
+	.test-colors {
+		color: green;
+		background-color: rgb(179, 225, 179);
+		border: 1px solid rgb(34, 176, 34);
 	}
 </style>

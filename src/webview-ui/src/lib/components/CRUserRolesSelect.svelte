@@ -72,6 +72,7 @@
     exportModels(modelName)
   }
   function dismiss(e: MouseEvent) {
+    e.preventDefault()
     ;(e.target as HTMLElement)
       .querySelector('.dropdown')
       ?.classList.add('hidden')
@@ -83,12 +84,14 @@
 
   <section
     class="select-wrapper"
-    aria-hidden={true}
+    role='presentation'
     onclick={(e: MouseEvent) => roleSelected(e, model)}
     onmouseleave={dismiss}
+    onmouseover={(e)=>e.preventDefault()}
+    onfocus={()=>{}}
   >
     <!-- selected roles -->
-    <div class="role-list" aria-hidden={true} data-model={model}>
+    <div class="role-list" role='presentation' data-model={model}>
       {#if selected.size}
         {#each [...selected] as role (role)}
           <span class="badge">
@@ -108,12 +111,11 @@
   onclick={(e: MouseEvent) =>
     toggleRole(e, selectedModel, (e.target as HTMLElement)?.innerText.slice(2))}
   onkeyup={undefined}
-  onmouseleave={(e: MouseEvent) => {
-    ;(e.currentTarget as HTMLElement).classList.add('hidden')
-  }}
-  aria-hidden={true}
+  onmouseleave={dismiss}
+  role='presentation'
 >
   {#each userRoles as role (role)}
+  <!-- selected role is dimmed as a visual information -->
     <p class:selected={rolesMap.get(selectedModel)?.has(role)}>
       <span class="letter">
         {role[0]}

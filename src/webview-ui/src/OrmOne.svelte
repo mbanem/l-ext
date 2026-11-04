@@ -4,7 +4,7 @@
   import { fade } from 'svelte/transition'
   import HoveringDetails from '$lib/components/HoverableDetails.svelte'
   import ConfigurationRequired from '$lib/components/ConfigurationRequired.svelte'
-  import CRTooltip from '$lib/utils/reactive-tooltip'
+  import CRTooltip from '$lib/utils/reactive-tooltip-old'
   import { anyMissing, sixHash } from '$lib/utils'
 
   let ttValidate: CRTooltip
@@ -285,6 +285,7 @@ function validateMsgClosed(){
           // })
           break
         case 'prismaProgress':
+          console.log('[msg]',msg)
           progressPercents = Number(msg.percent)
           statusMessage = msg.message
           const rl = msg.rawLine
@@ -686,7 +687,7 @@ Package Manager e.g. pnpm.
         cLass="button-install"
         onclick={startPrismaInstall}
         onmouseenter={showMandatoryEntries}
-        // onmouseleave={showMandatoryEntries}
+        onmouseleave={showMandatoryEntries}
         disabled={dbParamsMissing}
       >
         <span class:spinner={isInstalling}></span>

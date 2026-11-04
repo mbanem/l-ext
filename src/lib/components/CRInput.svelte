@@ -233,7 +233,7 @@
 			disabled={false}
 		/>
 	{/if}
-	<label for={elId} onclick={setFocus} aria-hidden={true} style={`${labelStyle}`}>
+	<label for={elId} onclick={setFocus} role='presentation' style={`${labelStyle}`}>
 		{title}
 		<span class="err">
 			{err ? ` - ${err}` : ''}

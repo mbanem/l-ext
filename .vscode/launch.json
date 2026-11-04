@@ -67,6 +67,11 @@
       "outFiles": [
         "${workspaceFolder}/out/**/*.js"
       ],
+      "skipFiles": [
+        "<node_internals>/**",
+        "**/node_modules/**",
+        "**/.vscode-server/**"
+      ],
       "preLaunchTask": "watch" 
     }
   ]

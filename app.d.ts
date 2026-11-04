@@ -1,6 +1,7 @@
 // See https://svelte.dev/docs/kit/types#app.d.ts
 // for information about these interfaces
 // import * as Types from '$lib/types/types';
+import type { THandleTryCatch } from '$lib/utils/helpers'
 declare global {
   interface String {
     capitalize(): string
@@ -9,6 +10,10 @@ declare global {
     // Prima funkciju (callback) koja kao argument može dobiti trenutni indeks
     times(callback: (index: number) => void): void
   }
+    var log: typeof console.log;
+    var handleTryCatch: THandleTryCatch;
+
+  globalThis.handleTryCatch = handleTryCatch;
   export type Field = {
     name: string
     type: string
@@ -26,8 +31,9 @@ declare global {
   }
   export type Models = Record<string, Model>
   export type RouteName = string
+  export type ModelName = string
   export type SelectedModel = Record<
-    string /* modelName */,
+    ModelName,
     {
       routeName: string
       permissions?: string

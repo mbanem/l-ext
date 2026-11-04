@@ -5,12 +5,12 @@
 	type TPos = { x: number; y: number };
 	type THovered = MouseEvent | HTMLElement | TPos;
   type TProps = {
-    onClose?: ()=>void
+    callback?: ()=>void
   }
 
-  let {onClose}:TProps = $props()
+  let {callback}:TProps = $props()
 
-  console.log('[OrmOne] entry point onClose', onClose)
+  // console.log('[OrmOne] entry point callback', callback)
 	// Svelte 5 State Trackers
 	let tooltipEl = $state<HTMLElement | undefined>(undefined);
 	let anchorRect = $state<DOMRect | TPos | undefined>(undefined);
@@ -22,20 +22,22 @@
 		return tooltipEl !== undefined;
 	}
 
-	async function fadeOutAndRemove() {
-    console.log('[OrmOne] fadeOutAndRemove entry point')
-		if (!tooltipEl) {
-      console.log('[OrmOne] fadeOutAndRemove no elementEl')
-      return;}
-      
-      tooltipEl.style.opacity = '0';
-      console.log('[OrmOne] fadeOutAndRemove set opacitz to zero')
-		await new Promise((resolve) => setTimeout(resolve, 300));
-		await tick();
-		tooltipEl.remove();
-		await tick();
-		tooltipEl = undefined;
-		anchorRect = undefined; // Reset tracking
+	export async function fadeOutAndRemove() {
+    // console.log('[OrmOne] fadeOutAndRemove entry point')
+		// if (!tooltipEl) {
+    //   // console.log('[OrmOne] fadeOutAndRemove no elementEl')
+    //   return;
+		// }
+    try{
+			(tooltipEl as HTMLElement).style.opacity = '0';
+			// console.log('[OrmOne] fadeOutAndRemove set opacitz to zero')
+			await new Promise((resolve) => setTimeout(resolve, 300));
+			await tick();
+			(tooltipEl as HTMLElement).remove();
+			await tick();
+			tooltipEl = undefined;
+			anchorRect = undefined; // Reset tracking
+		}finally{}
 	}
 
 	// 1. Isolated core layout position calculator
@@ -156,7 +158,7 @@
 			window.removeEventListener('resize', handleScroll);
 		};
 	});
-	let callback: TCallbackFunc;
+	// let callback: TCallbackFunc;
 	// -------------------- SHOW TOOLTIP --------------------------------------
 	export async function showTooltip(
 		anchor: THovered,
@@ -166,11 +168,8 @@
 		customStyles: Record<string, string> = {},
 	) {
 		try {
-      if(onClose){
-        onClose()
-      }
-			console.log('[OrmOne] CRReactiveTooltip showTooltip', onClose ? onClose : 'no callback');
 			timeout = timeout_;
+			console.log('got timeout', timeout)
 			if (tooltipEl !== undefined) return;
 
 			// Store configurations into reactive state blocks
@@ -189,7 +188,6 @@
           tooltipEl = tooltip;
         }
         tooltipEl.classList.add('dynamic-tooltip');
-        console.log('[OrmPne] tooltip got dynamic-tooltip', tooltipEl)
 
 			Object.assign(tooltipEl.style, {
 				position: 'fixed',
@@ -256,28 +254,31 @@
 			tooltipEl.style.opacity = '1';
 
 			if (timeout > 0) {
+				console.log('close via timeout')
 				setTimeout(() => {
-					const el = document.querySelector('.dynamic-tooltip')
-          el?.classList.remove('dynamic-tooltip');
-          console.log('[OrmPne] tooltip timeout remove dynamic-tooltip', el)
-					if (tooltipEl) {
+					// const el = document.querySelector('.dynamic-tooltip')
+          // el?.classList.remove('dynamic-tooltip');
+          // console.log('[OrmPne] tooltip timeout remove dynamic-tooltip', el)
+					// if (tooltipEl) {
+					(tooltipEl as HTMLElement).style.opacity = '0';
 						hideTooltip();
-					}
+					// }
 				}, timeout);
 			}
 
 			return tooltipEl;
 		} catch (err: unknown) {
-			console.error('showTooltip failed:', err);
+			const msg = err instanceof Error ? err.message : String(err)
+			console.log('showTooltip failed:', msg);
 		}
 	}
 
 	export async function hideTooltip() {
-    console.log('[OrmOne] hideTooltip entry point')
+    // console.log('[OrmOne] hideTooltip entry point')
     await fadeOutAndRemove;
-    console.log('[OrmOne] hideTooltip after fadeAndRemove')
+    // console.log('[OrmOne] hideTooltip after fadeAndRemove')
     if (callback !== undefined){
-      console.log('[OrmOne] hideTooltip callback', callback);
+      // console.log('[OrmOne] hideTooltip callback', callback);
       callback();
     }
 	}
