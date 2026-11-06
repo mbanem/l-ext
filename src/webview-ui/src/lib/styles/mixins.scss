@@ -1,6 +1,6 @@
 @mixin container($caption: 'container',
   $padding: 1rem 2rem,
-  $color: var(panel-color),
+  $color: var(--panel-color),
   $background-color: var(--panel-bg-color),
   $caption-color: var(--candidate-color),
   $caption-background-color: var(--candidate-bg-color),
@@ -15,12 +15,15 @@
   position: relative;
   width: $width;
   padding: $padding;
-  color: $caption-color;
+  color: $color;
   background-color: $background-color;
   border: $border;
   border-radius: $border-radius;
   box-shadow: $box-shadow;
   box-sizing: $box-sizing;
+
+  /* otherwise onmouseenter from below blocks pointer and fires mouseleave */
+  margin-top: 0.3rem;
 
   &::before {
     position: absolute;

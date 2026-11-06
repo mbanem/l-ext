@@ -1,7 +1,6 @@
 // See https://svelte.dev/docs/kit/types#app.d.ts
 // for information about these interfaces
 // import * as Types from '$lib/types/types';
-import type { THandleTryCatch } from '$lib/utils/helpers'
 declare global {
   interface String {
     capitalize(): string
@@ -11,9 +10,6 @@ declare global {
     times(callback: (index: number) => void): void
   }
     var log: typeof console.log;
-    var handleTryCatch: THandleTryCatch;
-
-  globalThis.handleTryCatch = handleTryCatch;
   export type Field = {
     name: string
     type: string

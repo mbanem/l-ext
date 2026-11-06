@@ -5,18 +5,9 @@ node_modules
 *.vsix
 /src/generated/prisma
 *.tgz
-
-
-/src/generated/prisma
-
-/src/generated/prisma
-
-/src/generated/prisma
-
-/src/generated/prisma
-
-/src/generated/prisma
-
-/src/generated/prisma
+out/
+.agents/
+.claude/
+.windsurf/
 
 /src/generated/prisma

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { vscode } from '$lib/utils/event-handler.browser'
   import { onMount, tick } from 'svelte'
-  import CRModelsHandler from '$lib/components/CRModelsHandler.svelte'
+  import CRModelsHandler from '$lib/components/ModelsHandler.svelte'
 
   type TProps = {
     pageInfo: TCallbackFunc
@@ -344,6 +344,7 @@
     bind:selectedModels
     bind:isLoading
     {userRoles}
+    appName='TestApp'
   ></CRModelsHandler>
 </div>
 

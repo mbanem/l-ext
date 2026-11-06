@@ -1,13 +1,14 @@
 <script lang="ts">
   import { vscode } from '$lib/utils/event-handler.browser'
-  import { onMount } from 'svelte'
+  import { onMount, tick } from 'svelte'
   import { fade } from 'svelte/transition'
   import HoveringDetails from '$lib/components/HoverableDetails.svelte'
   import ConfigurationRequired from '$lib/components/ConfigurationRequired.svelte'
-  import CRTooltip from '$lib/utils/reactive-tooltip-old'
+  import Tooltip from '$lib/utils/reactive-tooltip'
   import { anyMissing, sixHash } from '$lib/utils'
 
-  let ttValidate: CRTooltip
+  // used everywhere but first hide() if visible then show with new argumrnte
+  let tooltip: Tooltip = new Tooltip() 
   let mandatoryEntriesEl: HTMLDivElement
   let validateDbParams: HTMLDivElement
   let dbDepondOnRoleEl: HTMLDivElement
@@ -164,9 +165,8 @@
     if (!validationMessage) {
       return
     }
-    console.log('[OrmOne] showValidationMessage', validationMessage)
-    const tt = new CRTooltip()
-    tt.show(verifyDbParamsEl, validationMessage, 0, 'above', {
+    // console.log('[OrmOne] showValidationMessage', validationMessage)
+    tooltip.show(verifyDbParamsEl as HTMLElement, validationMessage, 0, 'above', {
       color: 'navy',
       backgroundColor: 'aliceblue',
     })
@@ -218,8 +218,8 @@
 // is shown, so when user close tooltip we collapse db params (isOpen set to false) 
 
 function validateMsgClosed(){
-  console.log('[OrmOne] tooltipOnClose CALLED')
-  isOpen = false
+  // console.log('[OrmOne] tooltipOnClose CALLED')
+  // isOpen = false
 }
   // let dbStatusMsg = $state('')
   onMount(() => {
@@ -241,9 +241,9 @@ function validateMsgClosed(){
         case 'dbParamsStatus':
           validationMessage = msg.dbParamsStatus
           paramsAreValid = validationMessage.includes('Params are Valid')
-          console.log('[OrmOne] paramsAreValid', paramsAreValid)
+          // console.log('[OrmOne] paramsAreValid', paramsAreValid)
           arrDBParamsStatus = validationMessage.split('\n').filter(Boolean)
-          console.log('[OrmOne] paramsAreValid', arrDBParamsStatus)
+          // console.log('[OrmOne] paramsAreValid', arrDBParamsStatus)
 
           existingDbParts = arrDBParamsStatus
             .map((line) =>
@@ -256,15 +256,14 @@ function validateMsgClosed(){
             .filter(Boolean)
             .join(', ')
 
-          console.log('[OrmOne] arrDBParamsStatus', arrDBParamsStatus)
+          // console.log('[OrmOne] arrDBParamsStatus', arrDBParamsStatus)
           showValidationMessage()
-          console.log('[OrmOne] endsWith', msg.dbParamsStatus)
+          // console.log('[OrmOne] endsWith', msg.dbParamsStatus)
           break
 
         case 'deleteDbObjectsResult':
           const success = msg.message.startsWith('Successfully')
-          const tt = new CRTooltip()
-          tt.show(
+          tooltip.show(
             verifyDbParamsEl as HTMLButtonElement,
             msg.message,
             0,
@@ -285,7 +284,7 @@ function validateMsgClosed(){
           // })
           break
         case 'prismaProgress':
-          console.log('[msg]',msg)
+          // console.log('[msg]',msg)
           progressPercents = Number(msg.percent)
           statusMessage = msg.message
           const rl = msg.rawLine
@@ -406,8 +405,8 @@ function validateMsgClosed(){
     }
   })
   function markEmptyDbParamFields() {
-    console.log('[OrmOne] markEmptyDbParamFields')
-    validationMessage = ''
+    // console.log('[OrmOne] markEmptyDbParamFields')
+    // validationMessage = ''
     // dropMessage = ''
     for (const key of Object.keys(dbState.els)) {
       const el = dbState.els[`${key}El`] as HTMLInputElement
@@ -421,24 +420,23 @@ function validateMsgClosed(){
     }
   }
   function showMandatoryEntries(e: MouseEvent) {
-    if (paramsAreValid) return
-    // if (e.type === 'mouseenter') {
+    // if (paramsAreValid) return
+
     if (dbParamsMissing) {
-      console.log('[OrmmOne] showMandatoryEntries open dbParams')
-      ttValidate = new CRTooltip()
-      ttValidate.show(e, mandatoryEntriesEl, 30000, 'below', {color:'crimson'},validateMsgClosed)
+      // console.log('[OrmmOne] showMandatoryEntries open dbParams')
+      tooltip.show(e, mandatoryEntriesEl, -1, 'below', {color:'tomato'},validateMsgClosed)
       
       markEmptyDbParamFields()
       // open db parameters block for user for db admin credentials
       isOpen = true
     } else {
       if (!arrDBParamsStatus.join('').includes('Params are Valid')) {
-        console.log('[OrmmOne] showMandatoryEntries open parms are walid')
-        const tt = new CRTooltip()
-        tt.show(e, validateDbParams, 0, 'below')
+        // console.log('[OrmmOne] showMandatoryEntries open parms are walid')
+        tooltip.show(e, validateDbParams, -1, 'below')
         isOpen = true
-      } else {
-        console.log('[OrmmOne] showMandatoryEntries close dbParams')
+      } 
+      else {
+        // console.log('[OrmmOne] showMandatoryEntries close dbParams')
 
         isOpen = false
       }
@@ -449,7 +447,7 @@ function validateMsgClosed(){
     // }
   }
   function dropSelected() {
-    console.log('[OrmOne] dropSelected msg')
+    // console.log('[OrmOne] dropSelected msg')
     existingDbParts =''
     paramsAreValid = true
     // ttValidate.hide()
@@ -492,12 +490,12 @@ function validateMsgClosed(){
     // sort ascending so Database wiil come first
     let toDrop = [...cbGroup].sort((a, b) => a.localeCompare(b)).join(',')
 
-    console.log(
-      '[OrmOne] postMessage dropDbObjects',
-      toDrop,
-      db_,
-      JSON.stringify(db_),
-    )
+    // console.log(
+    //   '[OrmOne] postMessage dropDbObjects',
+    //   toDrop,
+    //   db_,
+    //   JSON.stringify(db_),
+    // )
     vscode.postMessage({
       command: 'dropDbObjects',
       dropSelected: toDrop,
@@ -506,7 +504,7 @@ function validateMsgClosed(){
   }
 
 </script>
-
+<p>dbParamsMissing {dbParamsMissing}</p>
 <div
   class="mandatory-entries"
   bind:this={mandatoryEntriesEl}
@@ -625,17 +623,17 @@ Package Manager e.g. pnpm.
             {@render shouldDeleteDbObjects()}
           {/if}
 
-          <button
+          <!-- <button
             class="toggle-status-button"
             disabled={!validationMessage}
             style="padding:6px 0.6rem;text-align:center;color:sienna;"
           >
             Toggle Status
-          </button>
+          </button> -->
           <button
             bind:this={verifyDbParamsEl}
             onclick={verifyDbParamsWithPostgres}
-            style="position:relative;margin-left:3px;padding:6px 0.5rem;text-align:center;color:sienna"
+            style="position:relative;margin:5px 0 0 0;width:98%;padding:6px 0.5rem;text-align:center;color:sienna"
           >
             Verify Params with Postgres
           </button>
@@ -687,7 +685,7 @@ Package Manager e.g. pnpm.
         cLass="button-install"
         onclick={startPrismaInstall}
         onmouseenter={showMandatoryEntries}
-        onmouseleave={showMandatoryEntries}
+        onmouseleave={()=>{tooltip.hide();}}
         disabled={dbParamsMissing}
       >
         <span class:spinner={isInstalling}></span>
@@ -715,7 +713,7 @@ Package Manager e.g. pnpm.
     </div>
   {/if}
 {/if}
-
+<p>dbParamsMissing {dbParamsMissing}</p>
 <style lang="scss">
   .page-info {
     @include page-info();
@@ -828,10 +826,10 @@ Package Manager e.g. pnpm.
       cursor: pointer;
     }
   }
-  .toggle-status-button:disabled {
+  /*.toggle-status-button:disabled {
     cursor: not-allowed;
-    opacity: 0.6; /* Optional visual feedback for disabled state */
-  }
+    opacity: 0.6;
+  }*/
   .dependencies-label {
     display: inline-block;
     grid-column: span 3;

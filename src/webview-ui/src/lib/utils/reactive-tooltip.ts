@@ -17,7 +17,10 @@ export default class CRTooltip {
   }
 
   private async fadeOutAndRemove() {
-    if (!this.tooltipEl) return;
+    // console.log('[OrmThree] fadeOutAndRemove')
+    if (!this.tooltipEl) {
+      return;
+    }
 
     this.tooltipEl.style.opacity = '0';
     await new Promise((r) => setTimeout(r, 300));
@@ -38,7 +41,9 @@ export default class CRTooltip {
   }
 
   private updatePosition() {
-    if (!this.tooltipEl || !this.anchorRect) return;
+    if (!this.tooltipEl || !this.anchorRect) {
+      return;
+    }
 
     const tooltipRect = this.tooltipEl.getBoundingClientRect();
     const viewportWidth = document.documentElement.clientWidth;
@@ -119,7 +124,7 @@ export default class CRTooltip {
       fontSize: '14px',
       width: 'auto',
       padding: this.timeout === 0 ? '12px 32px 8px 12px' : '12px 12px 8px 12px',
-      transition: 'opacity 0.3s ease, left 0.2s cubic-bezier(0.25, 1, 0.5, 1), top 0.2s cubic-bezier(0.25, 1, 0.5, 1)',
+      /*transition: 'opacity 0.3s ease, left 0.2s cubic-bezier(0.25, 1, 0.5, 1), top 0.2s cubic-bezier(0.25, 1, 0.5, 1)',*/
       ...this.userStyles
     });
   }

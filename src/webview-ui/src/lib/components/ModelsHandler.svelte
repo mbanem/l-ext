@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { tick, onMount } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
-	import { capitalize, stringToFieldObject } from '$lib/utils';
+	import { capitalize } from '$lib/utils';
 	// import Tooltip from '$lib/components/CReactiveTooltip.svelte';
-	import Tooltip from '$lib/utils/reactive-tooltip-old';
+	import Tooltip from '$lib/utils/reactive-tooltip';
 	import ModelPermissions from '$lib/components/CRModelsPermissions.svelte';
 
 	let tooltip: Tooltip = new Tooltip();

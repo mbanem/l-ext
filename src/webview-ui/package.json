@@ -15,7 +15,6 @@
     "@eslint/compat": "^2.0.2",
     "@eslint/js": "^10.0.1",
     "@prisma/config": "^7.5.0",
-    "@types/bcrypt": "latest",
     "@types/node": "^25.2.1",
     "@typescript-eslint/eslint-plugin": "^8.54.0",
     "@typescript-eslint/parser": "^8.54.0",

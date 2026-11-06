@@ -38,8 +38,10 @@
     "build:webview": "cd src/webview-ui && pnpm run build",
     "build": "pnpm compile && pnpm build:webview",
     "vscode:prepublish": "pnpm build",
-    "package": "vsce package --no-dependencies --allow-package-all-secrets --allow-package-env-file",
+    "package-x": "vsce package --no-dependencies --allow-package-all-secrets --allow-package-env-file",
+    "package": "vsce package --no-dependencies --no-yarn --allow-package-all-secrets --allow-package-env-file",
     "ix": "pnpm package && VERSION=$(jq -r '.version' package.json) && code --install-extension l-ext-${VERSION}.vsix --force",
+    "rx-x": "node scripts/rx.js",
     "rx": "clear; rm -rf *.vsix out .env prisma prisma.config.ts node_modules/.cache node_modules/.vite; printf \"NODE_ENV=development\\nDATABASE_URL=postgresql://mili:kiki-fake@localhost:5432/forms?schema=public\" > .env; pnpm ix"
   },
   "devDependencies": {
@@ -52,7 +54,7 @@
     "@sveltejs/kit": "^2.69.1",
     "@sveltejs/vite-plugin-svelte": "^7.2.0",
     "@tsconfig/svelte": "^5.0.8",
-    "@types/bcrypt": "latest",
+    "@types/bcrypt": "^6.0.0",
     "@types/eslint": "^9.6.1",
     "@types/node": "^26.1.1",
     "@types/pg": "^8.20.0",
@@ -87,7 +89,6 @@
   },
   "dependencies": {
     "@prisma/client": "^7.9.1",
-    "bcrypt": "^6.0.0",
     "dotenv": "^17.4.2",
     "pg": "^8.22.0"
   }
