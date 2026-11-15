@@ -318,7 +318,7 @@ export async function setupOrmOneMessageHandler(
   )
 
   context.subscriptions.push(saveListener, closeListener)
-console.log('[ormOne] estanlished listener and listen for messages')
+  console.log('[ormOne] estanlished listener and listen for messages')
   // ---------- Message listener ----------
   const messageListener = webview.onDidReceiveMessage(async (msg) => {
     switch (msg.command) {
@@ -499,7 +499,7 @@ console.log('[ormOne] estanlished listener and listen for messages')
         break
     }
   })
-console.log('[ormOne] setupOrmMessageHandler result', result)
+  console.log('[ormOne] setupOrmMessageHandler result', result)
   return result
 }
 
@@ -848,7 +848,7 @@ function createPendingScemaVerified() {
   `
   fs.writeFileSync(paths.notVerified, text, 'utf-8')
 }
-function deletePendingFile(filePath:string) {
+function deletePendingFile(filePath: string) {
   if (fs.existsSync(filePath)) {
     fs.unlinkSync(filePath)
   }
@@ -914,7 +914,7 @@ function isConnectionStringOK(url: string): boolean {
 
 // You still need to implement or keep your existing areSchemaAndEnvOK function
 async function areSchemaAndEnvOK() {
-  const { models } = parsePrismaSchema(fs.readFileSync(paths.schema, 'utf-8'))
+  const { models } = await parsePrismaSchema(fs.readFileSync(paths.schema, 'utf-8'))
   const envContent = fs.readFileSync(paths.env, 'utf-8')
   const connOK = isConnectionStringOK(envContent)
   const modelsOK = Object.keys(models).length > 0

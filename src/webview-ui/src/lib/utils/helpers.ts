@@ -32,19 +32,19 @@ export const capitalize = (str: string) => {
       .replace(/(_\w)/, spaceUpper)
   )
 }
-String.prototype.capitalize = function () {
-  // TypeScript sada zna da 'capitalize' postoji na String prototipu
-  // i zna da 'this' unutar ove funkcije predstavlja string objekat
-  return capitalize(this as string)
-}
-Number.prototype.times = function (callback: (index: number) => void): void {
-  // 'this' predstavlja broj nad kojim se metoda poziva
-  const count = Number(this)
+// String.prototype.capitalize = function () {
+//   // TypeScript sada zna da 'capitalize' postoji na String prototipu
+//   // i zna da 'this' unutar ove funkcije predstavlja string objekat
+//   return capitalize(this as string)
+// }
+// Number.prototype.times = function (callback: (index: number) => void): void {
+//   // 'this' predstavlja broj nad kojim se metoda poziva
+//   const count = Number(this)
 
-  for (let i = 0; i < count; i++) {
-    callback(i)
-  }
-}
+//   for (let i = 0; i < count; i++) {
+//     callback(i)
+//   }
+// }
 // created object should have the following properties
 const attrNames = [
   '"name": ',

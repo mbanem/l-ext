@@ -5,15 +5,23 @@ import { sveltePreprocess } from 'svelte-preprocess'
 import { resolve } from 'path'
 // import { visualizer } from 'rollup-plugin-visualizer'
 
+// Helper to normalize slashes for Sass @use paths across WSL/Linux/Windows
+const toPosixPath = (p: string) => p.replace(/\\/g, '/')
+
+const variablesPath = toPosixPath(resolve(import.meta.dirname, 'src/lib/styles/variables.scss'))
+const mixinsPath = toPosixPath(resolve(import.meta.dirname, 'src/lib/styles/mixins.scss'))
+
+const scssPrepend = `
+  @use "${variablesPath}" as *;
+  @use "${mixinsPath}" as *;
+`
+
 export default defineConfig({
   plugins: [
     svelte({
       preprocess: sveltePreprocess({
         scss: {
-          prependData: `
-            @use "${resolve(__dirname, 'src/lib/styles/variables.scss')}" as *;
-            @use "${resolve(__dirname, 'src/lib/styles/mixins.scss')}" as *;
-          `,
+          prependData: scssPrepend,
         },
       }),
       onwarn: (warning, handler) => {
@@ -26,6 +34,7 @@ export default defineConfig({
         handler(warning)
       },
     }),
+
     // visualizer({
     //   emitFile: false,
     //   filename: 'stats.html', // pravi HTML fajl sa grafikonom
@@ -37,35 +46,31 @@ export default defineConfig({
 
   resolve: {
     alias: {
-      '$lib': resolve(__dirname, 'src/lib'),
-      '@': resolve(__dirname, './src'),
+      '$lib': resolve(import.meta.dirname, 'src/lib'),
+      '@': resolve(import.meta.dirname, 'src'),
     },
   },
 
   css: {
     preprocessorOptions: {
       scss: {
-        additionalData: `
-          @use "${resolve(__dirname, 'src/lib/styles/variables.scss')}" as *;
-          @use "${resolve(__dirname, 'src/lib/styles/mixins.scss')}" as *;
-        `,
+        additionalData: scssPrepend,
         charset: false,
       },
     },
   },
 
   build: {
-    outDir: resolve(__dirname, '../../out/webview-assets'),
+    outDir: resolve(import.meta.dirname, '../../out/webview-assets'),
     emptyOutDir: true,
     target: 'es2020',
     minify: 'esbuild',
     sourcemap: false,
-    // When you ship the extension you can switch to sourcemap: false or 'hidden' for the final package.
     manifest: true,
 
     rollupOptions: {
       input: {
-        app: resolve(__dirname, 'index.html'),
+        app: resolve(import.meta.dirname, 'index.html'),
       },
       output: {
         entryFileNames: 'assets/[name]-[hash].js',

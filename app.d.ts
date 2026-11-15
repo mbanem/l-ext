@@ -1,15 +1,18 @@
 // See https://svelte.dev/docs/kit/types#app.d.ts
 // for information about these interfaces
 // import * as Types from '$lib/types/types';
+// import { SvelteMap as SvelteMap_ } from 'svelte/reactivity';
 declare global {
   interface String {
     capitalize(): string
   }
   interface Number {
-    // Prima funkciju (callback) koja kao argument može dobiti trenutni indeks
+    // gets (callback) that recives currrent index
     times(callback: (index: number) => void): void
   }
-    var log: typeof console.log;
+  var log: typeof console.log;
+  type SvelteMap<K, V> = SvelteMap_<K, V>;
+  export { SvelteMap_ as SvelteMap };
   export type Field = {
     name: string
     type: string
@@ -25,9 +28,10 @@ declare global {
     attrs?: string[]
     permissions?: string
   }
-  export type Models = Record<string, Model>
   export type RouteName = string
   export type ModelName = string
+  export type EnumName = string
+  export type Models = Record<string, Model>
   export type SelectedModel = Record<
     ModelName,
     {
@@ -35,20 +39,16 @@ declare global {
       permissions?: string
     }
   >
-  export type SelectedModels = Record<RouteName, SelectedModel>
+  export type SelectedModels = SvelteMap<RouteName, SelectedModel>
   export type Components = string[]
   export type Payload = Record<
     string,
     SelectedModels | Model | Components | string
   > // { route: string | null } = { route: null };
-  export type RouteName = string
-  export type SelectedModels = Record<RouteName, Model>
-  export type Payload = Record<
-    string,
-    SelectedModels | Model | string[] | string
-  >
+  export type TEnum = Record<string, string>
+  export type TEnums = Record<string, TEnum>;
   export type TCallbackFunc = (() => void) | undefined
-  export type TPaths = Record<string, string>
+  export type TPaths = Record<string, vscode.Uri>
   export type DbParams = Record<string, string | number>
 
   // props for creating +page.svelte/+page.server.ts route pager
@@ -57,8 +57,6 @@ declare global {
     model: Model
   }
   export type PageKey = 'OrmOne' | 'OrmThree'
-  export type TEnum = Record<string, string>
-  export type TEnums = Record<string, TEnum>
   export type TResult = { success: boolean; error?: string }
   export type TCommandResult<TF extends boolean = false> = {
     success: TF
@@ -71,12 +69,12 @@ declare global {
   }
 
   export const CStick = {
-  top: 'top',
-  right: 'right',
-  below: 'below',
-  left: 'left',
-} as const
-export type TStick = typeof CStick[keyof typeof CStick]
+    top: 'top',
+    right: 'right',
+    below: 'below',
+    left: 'left',
+  } as const
+  export type TStick = typeof CStick[keyof typeof CStick]
   // export type DependencyType = 'dependencies' | 'devDependencies'
   namespace App {
     // interface Error {}
@@ -89,4 +87,4 @@ export type TStick = typeof CStick[keyof typeof CStick]
   }
 }
 
-export {}
+export { }

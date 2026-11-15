@@ -1,10 +1,10 @@
 // See https://svelte.dev/docs/kit/types#app.d.ts
 // for information about these interfaces
 // import * as Types from '$lib/types/types';
-import { Paths as PathsClass } from './src/extension.js'
-
+// import { Paths as PathsClass } from './src/extension.js'
+// import { SvelteMap} from 'svelte/reactivity'
 declare global {
-  type TPaths = PathsClass
+  // type TPaths = PathsClass
   type Field = {
     name: string
     type: string
@@ -15,10 +15,11 @@ declare global {
     permissions?: string
   }
   interface String {
-    /**
-     * Pretvara prvo slovo stringa u veliko.
-     */
     capitalize(): string
+  }
+  interface Number {
+    // Prima funkciju (callback) koja kao argument može dobiti trenutni indeks
+    times(callback: (index: number) => void): void
   }
   function myGlobalFunction(param: string): number
   // no name; it should be part of Models with their name as a key
@@ -27,17 +28,18 @@ declare global {
     attrs?: string[]
     permissions?: string
   }
-  type RouteName = string
-  type ModelName = string
-  type Models = Record<ModelName, Model>
-  type SelectedModel = Record<
-    ModelName,
-    {
-      routeName: string
-      permissions?: string
-    }
-  >
-  type SelectedModels = Record<RouteName, SelectedModel>
+   export type RouteName = string
+	export type ModelName = string
+	export type EnumName = string
+	export type Models = Record<string, Model>
+	export type SelectedModel = Record<
+		ModelName,
+		{
+			routeName: string
+			permissions?: string
+		}
+	>
+	export type SelectedModels = Record<RouteName, SelectedModel>
   type Components = string[]
   type TypeOfPayload = string
   type Payload = Record<

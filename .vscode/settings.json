@@ -22,7 +22,7 @@
   "eslint.validate": ["javascript", "typescript", "svelte"],
   "eslint.format.enable": false, // Let Prettier handle formatting
   "[typescript]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
+    "editor.defaultFormatter": "vscode.typescript-language-features"
   },
   "[svelte]": {
   "editor.defaultFormatter": "svelte.svelte-vscode",

@@ -1,7 +1,8 @@
 <script lang="ts">
   import { vscode } from '$lib/utils/event-handler.browser'
   import { onMount, tick } from 'svelte'
-  import CRModelsHandler from '$lib/components/ModelsHandler.svelte'
+  import { SvelteMap } from 'svelte/reactivity'
+  import CRModelsHandler from '$lib/components/X-ModelsHandler.svelte'
 
   type TProps = {
     pageInfo: TCallbackFunc
@@ -60,7 +61,7 @@
   // when any checkbox on a component model list is selected
   // the component keeps this selectedModels in sync
   // it is Record<ModelName,{routeName, permissions?}>
-  let selectedModels = $state<SelectedModels>({})
+  let selectedModels = new SvelteMap<string, SelectedModel>();
   let userRoles = $state<string[]>([])
   // // what components users want to include in newnly generated pages
   let crComponents: string[] = $state([
@@ -75,7 +76,8 @@
   let appFeatures: string[] = $state([])
 
   function getPayload() {
-    if (Object.keys(selectedModels).length === 0) {
+    // if (Object.keys(selectedModels).length === 0) {
+    if (selectedModels.size === 0) {
       return selectedModels
     }
 
@@ -121,7 +123,8 @@
   }
 
   let buttonNotAllowed = $derived(
-    Object.keys(selectedModels).length === 0,
+    // Object.keys(selectedModels).length === 0,
+    selectedModels.size === 0,
   ) as boolean
 
   onMount(() => {

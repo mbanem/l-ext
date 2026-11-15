@@ -21,8 +21,8 @@ let wView: vscode.Webview | undefined = undefined
 let exUri: vscode.Uri | undefined = undefined
 
 const videoNames = [
-    'CRActivity','CRInput','CRModelPermissions','CRSpinner','CRSummaryDetails','CRTooltip'
-  ]
+  'CRActivity', 'CRInput', 'CRModelPermissions', 'CRSpinner', 'CRSummaryDetails', 'CRTooltip'
+]
 export function getVideoUris(context: vscode.ExtensionContext, videoNames: string[]): Record<string, string> {
   const videoUris: Record<string, string> = {}
 
@@ -211,7 +211,7 @@ export async function activate(context: vscode.ExtensionContext) {
           {
             enableScripts: true, // Allows JS execution inside HTML
             retainContextWhenHidden: true, // Preserves state when tab loses focus
-            
+
             localResourceRoots: [
               // Restricts local file loading areas
               // 1. Allow the extension's entire compiled output folder (Scripts + CSS + Videos)
@@ -233,7 +233,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
         exUri = context.extensionUri
         wView = panel.webview
-        
+
         // 4. Register lifecycle IMMEDIATELY after creation
         panel.onDidDispose(() => {
           console.log('[extension] panel disposed, set panel = undefined')
@@ -262,7 +262,7 @@ export async function activate(context: vscode.ExtensionContext) {
           env: path.join(rootPath, '.env'),
           pending: path.join(rootPath, 'prisma/installORMPartTwoPending.txt'),
           schema: path.join(rootPath, 'prisma/schema.prisma'),
-          notVerified:path.join(rootPath, 'prisma/pendingSchemaVerification.txt'),
+          notVerified: path.join(rootPath, 'prisma/pendingSchemaVerification.txt'),
           components: path.join(rootPath, 'src', 'lib', 'components'),
         } as TPaths
 
@@ -271,7 +271,7 @@ export async function activate(context: vscode.ExtensionContext) {
         if (
           (paths.schema && !fs.existsSync(paths.schema)) ||
           fs.existsSync(paths.pending) ||
-          fs.existsSync(paths.notVerified) 
+          fs.existsSync(paths.notVerified)
         ) {
           console.log('[ext] no schema or some pending exists')
           initialpage = 'OrmOne' as PageKey
@@ -285,14 +285,14 @@ export async function activate(context: vscode.ExtensionContext) {
         }
 
         // if (initialpage === 'OrmOne') {
-          let res = await setupOrmOneMessageHandler(context, panel!, paths)
-          console.log('[extension] setupOrmOneMessageHandler result', res)
-          if (!res.success) {
-            console.log('[extension] setupOrmOneMessageHandler failed', res)
-            return
-          } else {
-            console.log('[extension] setupOrmOneMessageHandler succeeded', res)
-          }
+        let res = await setupOrmOneMessageHandler(context, panel!, paths)
+        console.log('[extension] setupOrmOneMessageHandler result', res)
+        if (!res.success) {
+          console.log('[extension] setupOrmOneMessageHandler failed', res)
+          return
+        } else {
+          console.log('[extension] setupOrmOneMessageHandler succeeded', res)
+        }
         // }
         // else if (initialpage === 'OrmTwo') {
         //   let res = await setupOrmTwoMessageHandler(
@@ -342,7 +342,7 @@ export async function activate(context: vscode.ExtensionContext) {
                 }
                 try {
                   console.log('[extension] calling parsePrismaSchema')
-                  const { models, enums } = parsePrismaSchema(schema)
+                  const { models, enums } = await parsePrismaSchema(schema)
                   console.log(
                     '[extension] models.lebgth?',
                     Object.keys(models).length,
@@ -518,4 +518,4 @@ export async function activate(context: vscode.ExtensionContext) {
     console.log('Extension failed to activate. Check output logs.')
   }
 }
-export function deactivate() {}
+export function deactivate() { }

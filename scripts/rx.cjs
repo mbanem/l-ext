@@ -4,21 +4,24 @@ const { execSync } = require('node:child_process');
 
 const rootDir = process.cwd();
 
-console.log('🧹 Cleaning up environment & build artifacts...');
+console.log('🧹 Cleaning up environment, build artifacts, and AI folders...');
 
 // 1. Clear terminal output
 console.clear();
 
-// 2. Remove specified files and directories safely
+// 2. Remove specified files, directories, and AI folders safely
 const targetsToClean = [
   '.env',
   'prisma.config.ts',
   'node_modules/.cache',
   'node_modules/.vite',
   'out',
-  'prisma'
+  '.claude',
+  '.windsurf',
+  '.agents'
 ];
 
+// Clean glob patterns like *.vsix
 try {
   const vsixFiles = fs.readdirSync(rootDir).filter(file => file.endsWith('.vsix'));
   targetsToClean.push(...vsixFiles);

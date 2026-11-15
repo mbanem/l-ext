@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { tick, onMount } from 'svelte';
 	import { SvelteSet } from 'svelte/reactivity';
-	import { capitalize } from '$lib/utils';
+	import { capitalize, stringToFieldObject } from '$lib/utils';
 	// import Tooltip from '$lib/components/CReactiveTooltip.svelte';
 	import Tooltip from '$lib/utils/reactive-tooltip';
-	import ModelPermissions from '$lib/components/CRModelsPermissions.svelte';
+	import ModelPermissions from '$lib/components/ModelsPermissions.svelte';
 
 	let tooltip: Tooltip = new Tooltip();
 	// Track child component references per model name
@@ -68,10 +68,6 @@
 	// 		}
 	// 	}
 	// }
-
-	const childCallingParent = (msg: string) => {
-		g.innerText = msg;
-	};
 
 	export const modelsPermissions = (modelName: string, model: Model) => {
 		console.log('ModelHandler.svelte modelsPermissions called', modelName, model.permissions);
@@ -396,7 +392,6 @@
 		bind:models
 		{modelName}
 		{modelsPermissions}
-		{childCallingParent}
 	/>
 {/snippet}
 
