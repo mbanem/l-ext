@@ -6,6 +6,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { runCommandStream } from './run-command-stream'
 import { CommandResultTracker, getVideoUris, sleep, waitForNewFile } from './extension'
+// for verification is schema is OK
 import { parsePrismaSchema } from './webview-ui/src/lib/utils/parse-prisma-schema.js'
 import { anyMissing } from './webview-ui/src/lib/utils'
 // import { kStringMaxLength } from 'node:buffer'

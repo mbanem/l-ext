@@ -1,4 +1,3 @@
-// src/webview-ui/src/lib/utils/toggle-theme.ts
 
 export type Theme = 'light' | 'dark'
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { vscode } from '$lib/utils/event-handler.browser'
+  import { vscode } from '$lib/utils/helpers.browser'
   import { onMount, tick } from 'svelte'
   import { fade } from 'svelte/transition'
   import HoveringDetails from '$lib/components/HoverableDetails.svelte'
