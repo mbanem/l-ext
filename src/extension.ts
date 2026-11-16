@@ -1,28 +1,37 @@
 import * as vscode from 'vscode'
-import { ExtensionMode } from 'vscode'
 import * as fs from 'fs'
 import * as path from 'path'
 import { inspect } from 'util'
 import { displayWebview } from './webview.js'
-// import { spawn, execSync, ChildProcess } from 'child_process'
 import { parsePrismaSchema } from './webview-ui/src/lib/utils/parse-prisma-schema.js'
 import { setupOrmOneMessageHandler } from './ormOne.js'
-// import { setupOrmTwoMessageHandler } from './ormTwo.js'
-// import { generateParts } from './partsGenerator.js'
 
-let paths: TPaths = {}
-// let db: DbParams = {}
-let appName = ''
-let inDevelopmentMode = false
+
+export let paths: TPaths = {}
+let appName = ''    // set inside getWorkspaceRootUri func
 
 let panel: vscode.WebviewPanel | undefined = undefined
-// export const sudoName_ = 'mili'
 let wView: vscode.Webview | undefined = undefined
-let exUri: vscode.Uri | undefined = undefined
 
 const videoNames = [
   'CRActivity', 'CRInput', 'CRModelPermissions', 'CRSpinner', 'CRSummaryDetails', 'CRTooltip'
 ]
+export async function isFile(targetUri: vscode.Uri): Promise<boolean> {
+  try {
+    const stat = await vscode.workspace.fs.stat(targetUri);
+    // Use bitwise AND (&) because symbolic links combine FileType flags
+    return (stat.type & vscode.FileType.File) !== 0
+  } catch { }
+  return false;
+}
+export async function isFolder(targetUri: vscode.Uri): Promise<boolean> {
+  try {
+    const stat = await vscode.workspace.fs.stat(targetUri);
+    // Use bitwise AND (&) because symbolic links combine FileType flags
+    return (stat.type & vscode.FileType.Directory) !== 0
+  } catch { }
+  return false;
+}
 export function getVideoUris(context: vscode.ExtensionContext, videoNames: string[]): Record<string, string> {
   const videoUris: Record<string, string> = {}
 
@@ -135,64 +144,63 @@ export const waitForNewFile = async (
     })
   })
 }
-// export const channel = vscode.window.createOutputChannel('loadMainMarkup')
-// export const channelShow = (msg: string | string[], show: boolean = false) => {
-//   channel.appendLine(Array.isArray(msg) ? msg.join('\n') : msg)
-//   if (show) {
-//     channel.show()
-//   }
-// }
-// export const error = (msg: string) => {
-//   vscode.window.showErrorMessage(msg)
-//   channel.appendLine(`ERROR: ${msg}`)
-// }
-// export const info = (msg: string) => {
-//   vscode.window.showInformationMessage(msg)
-// }
-function getWorkspaceRootPath(): string | undefined {
-  const folders = vscode.workspace.workspaceFolders
+
+async function getWorkspaceRootUri(): Promise<vscode.Uri | undefined> {
+  const folders = vscode.workspace.workspaceFolders;
 
   if (!folders || folders.length === 0) {
-    if (inDevelopmentMode) {
-      console.log('[ext] Test window is empty. Using absolute dev fallback.')
-      return '/home/mili/Ext/PreviousStages/l-ext'
-    }
-    return undefined
+    vscode.window.showWarningMessage(
+      'Please open a workspace folder before running CRUD Support.'
+    );
+    return undefined;
   }
 
-  // Handle Multi-Project scenarios
-  if (folders.length > 1) {
-    console.log(
-      '[ext] Multi-root workspace detected. Finding active project...',
-    )
+  // A single-folder workspace is unambiguous.
+  if (folders.length === 1) {
+    appName = folders[0].name;
+    return folders[0].uri;
+  }
 
-    // Attempt to grab the path of the file currently active in the text editor
-    const activeEditor = vscode.window.activeTextEditor
-    if (activeEditor) {
-      const activeWorkspace = vscode.workspace.getWorkspaceFolder(
-        activeEditor.document.uri,
-      )
-      if (activeWorkspace) {
-        console.log(
-          '[ext] Found root path via active editor:',
-          activeWorkspace.uri.fsPath,
-        )
-        return activeWorkspace.uri.fsPath
-      }
+  // In a multi-root workspace, prefer the folder containing
+  // the currently active editor.
+  const activeEditor = vscode.window.activeTextEditor;
+
+  if (activeEditor) {
+    const activeFolder = vscode.workspace.getWorkspaceFolder(
+      activeEditor.document.uri
+    );
+
+    if (activeFolder) {
+      appName = activeFolder.name;
+      return activeFolder.uri;
     }
   }
 
-  // Fallback to the first open folder (guaranteed to be a Linux path under WSL)
-  const rootPath = folders[0].uri.fsPath
-  console.log('[ext] Resolved workspace root fsPath:', rootPath)
-  return rootPath
+  // No active editor, or the editor is not inside a workspace:
+  // let the user choose the intended application folder.
+  const selected = await vscode.window.showQuickPick(
+    folders.map(folder => ({
+      label: folder.name,
+      description: folder.uri.fsPath,
+      uri: folder.uri
+    })),
+    {
+      placeHolder: 'Select the application workspace folder'
+    }
+  );
+
+  if (!selected) { return undefined; }
+
+  appName = selected.label;
+  return selected.uri;
 }
+
 
 export async function activate(context: vscode.ExtensionContext) {
   try {
     // show('l-ext.crudTest ACTIVATED')
     console.log(`CRUD l-ext -- activated`)
-    inDevelopmentMode = context.extensionMode === ExtensionMode.Development
+    // inDevelopmentMode = context.extensionMode === ExtensionMode.Development
     if (panel) {
       context.subscriptions.push(panel)
     }
@@ -200,10 +208,24 @@ export async function activate(context: vscode.ExtensionContext) {
       vscode.commands.registerCommand('l-ext.crudTest', async () => {
         console.log('l-ext.crudTest REGISTERED')
 
+        // reuse an existing panel
         if (panel) {
+          console.log('[CRUD] Existing panel found');
           panel.reveal(vscode.ViewColumn.One)
           return
         }
+        console.log('[CRUD] Before getWorkspaceRootUri');
+
+        const root = await getWorkspaceRootUri();
+
+        console.log('[CRUD] Root returned:', root?.fsPath ?? 'UNDEFINED');
+
+        if (!root) {
+          console.log('[CRUD] Returning because root is undefined');
+          return;
+        }
+        console.log(`Selected application root: ${root.fsPath}`);
+
         panel = vscode.window.createWebviewPanel(
           'crCrudSupport', // Internal unique identifier string
           'CRUD Support', // Title visible to the user on the tab
@@ -214,7 +236,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
             localResourceRoots: [
               // Restricts local file loading areas
-              // 1. Allow the extension's entire compiled output folder (Scripts + CSS + Videos)
+              // Allow the extension's entire compiled output folder (Scripts + CSS + Videos)
               vscode.Uri.joinPath(context.extensionUri, 'out'),
               vscode.Uri.joinPath(
                 context.extensionUri,
@@ -222,7 +244,7 @@ export async function activate(context: vscode.ExtensionContext) {
                 'webview-ui',
                 'public',
               ),
-              // 2. Critically allow the end-user's opened workspace directory so webview can parse their schema
+              // Critically allow the end-user's opened workspace directory so webview can parse their schema
               ...(vscode.workspace.workspaceFolders
                 ? vscode.workspace.workspaceFolders.map((f) => f.uri)
                 : []),
@@ -231,60 +253,43 @@ export async function activate(context: vscode.ExtensionContext) {
           },
         )
 
-        exUri = context.extensionUri
+        console.log(`after createWebviewPanel`)
         wView = panel.webview
-
-        // 4. Register lifecycle IMMEDIATELY after creation
+        console.log(`wView is null? ${wView === null}`)
+        // Register lifecycle immediately after creation
         panel.onDidDispose(() => {
           console.log('[extension] panel disposed, set panel = undefined')
           panel = undefined // Safely clears the reference so it can be re-created later
         })
-        let rootPath = getWorkspaceRootPath() as string
-        // let rootPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
 
-        // if (!rootPath && inDevelopmentMode) {
-        //   // NOTE launching from Command Palette is OK, debug needs this
-        //   rootPath = '/home/mili/Ext/PreviousStages/l-ext'
-        //   console.log(
-        //     '[extension] debug only! rootPath not found use /home/mili/Ext/l-ext',
-        //   )
-        // }
-        // if (!rootPath) {
-        //   console.log(
-        //     '[extension] No workspace folder found. Open a folder first.',
-        //   )
-        //   return
-        // }
-        appName = rootPath.match(/\/?([a-zA-z0-9_-]+)$/)?.[1] as string
-        console.log(`[extension] Resolved Root Path: ${rootPath}`)
         paths = {
-          root: rootPath,
-          env: path.join(rootPath, '.env'),
-          pending: path.join(rootPath, 'prisma/installORMPartTwoPending.txt'),
-          schema: path.join(rootPath, 'prisma/schema.prisma'),
-          notVerified: path.join(rootPath, 'prisma/pendingSchemaVerification.txt'),
-          components: path.join(rootPath, 'src', 'lib', 'components'),
+          root: root,
+          env: vscode.Uri.joinPath(root, '.env'),
+          pending: vscode.Uri.joinPath(root, 'prisma', 'installORMPartTwoPending.txt'),
+          schema: vscode.Uri.joinPath(root, 'prisma', 'schema.prisma'),
+          notVerified: vscode.Uri.joinPath(root, 'prisma', 'pendingSchemaVerification.txt'),
+          components: vscode.Uri.joinPath(root, 'src', 'lib', 'components'),
         } as TPaths
 
+        console.log(`after paths? ${paths}`)
         // set initial page based on progression state
         let initialpage = 'OrmThree'
-        if (
-          (paths.schema && !fs.existsSync(paths.schema)) ||
-          fs.existsSync(paths.pending) ||
-          fs.existsSync(paths.notVerified)
+        if (paths.schema && !(await isFile(paths.schema)) ||
+          (await isFile(paths.pending)) ||
+          (await isFile(paths.notVerified))
         ) {
           console.log('[ext] no schema or some pending exists')
           initialpage = 'OrmOne' as PageKey
         }
 
-        if (!displayWebview(context, panel!, initialpage as PageKey).success) {
+        if (!(await displayWebview(context, panel!, initialpage as PageKey)).success) {
           console.log(
             '[extension] closing displayWebview OrmOne return result.success false',
           )
           return
         }
 
-        // if (initialpage === 'OrmOne') {
+        console.log(`before setupOrmOneMessageHandler`)
         let res = await setupOrmOneMessageHandler(context, panel!, paths)
         console.log('[extension] setupOrmOneMessageHandler result', res)
         if (!res.success) {
@@ -293,18 +298,7 @@ export async function activate(context: vscode.ExtensionContext) {
         } else {
           console.log('[extension] setupOrmOneMessageHandler succeeded', res)
         }
-        // }
-        // else if (initialpage === 'OrmTwo') {
-        //   let res = await setupOrmTwoMessageHandler(
-        //     context,
-        //     panel!.webview,
-        //     paths,
-        //   )
-        //   console.log('[extension] setupOrmTwoMessageHandler result', res)
-        //   if (!res.success) {
-        //     return
-        //   }
-        // }
+
         panel!.onDidDispose(() => {
           console.log('[extension] panel disposed, set panel to undefined')
           panel = undefined
@@ -368,15 +362,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
                 schema = '' // free up memory by clearing schema string after parsing
                 break
-              // case 'AppSvelteReady':
-              //   console.log(
-              //     '[extension] App.svelte report it is ready; we post showPage OrmOne',
-              //   )
-              //   panel!.webview.postMessage({
-              //     command: 'showPage',
-              //     page: 'OrmOne',
-              //   })
-              //   break
+
               case 'close':
                 console.log(
                   '[extension]  extension is closing, panel!.dispose()',
@@ -384,130 +370,6 @@ export async function activate(context: vscode.ExtensionContext) {
                 messageHandler.dispose()
                 panel!.dispose()
                 break
-              // case 'prismaPartOne':
-              // console.log(
-              //   `[Ext onDid] prismaPartOne comand request from OrmOne ${msg.command}`,
-              // )
-              // // db = JSON.parse(msg.payload) as DbParams
-              // // db.adminPwd = sudoName_ as string
-              // // if (db && paths) {
-              // setupOrmOneMessageHandler(context, panel!.webview, paths) // ← Pass webview
-              // // }
-              // // console.log(`after call to prismaPartOne success is ${result.success}`)
-              // // // send console.log to OrmOne postMessage(message:any) so we send an object message is object {command,siccess}
-              // panel!.webview.postMessage({
-              //   command: 'partOneDone',
-              //   success: result.success,
-              // })
-              // console.log(`sent message partOneDone to OrmOne`)
-              // if (!result.success) {
-              //   panel!.webview.postMessage({
-              //     command: 'showPage',
-              //     page: 'OrmTwo',
-              //   })
-              // }
-              // break
-
-              // case 'prismaPartTwo':
-              //   console.log(
-              //     '[extension] prismaPartTwo command request from OrmOne.svelte',
-              //     msg.payload,
-              //   )
-              //   if (
-              //     (
-              //       await setupOrmTwoMessageHandler(
-              //         context,
-              //         panel!.webview,
-              //         paths,
-              //       )
-              //     ).success
-              //   ) {
-              //     console.log('[extension] PrismaPartTwo done, open OrmThree')
-              //     // panel!.webview.postMessage({
-              //     //   command: 'showPage',
-              //     //   page: 'OrmThree',
-              //     // })
-              //   } else {
-              //     console.log('[extension] failed to install prismaPartTwo')
-              //   }
-              //   break
-
-              // case 'showConfirmation':
-              //   const {
-              //     id,
-              //     message,
-              //     detail,
-              //     confirmText = 'Yes',
-              //     cancelText = 'No',
-              //     title,
-              //   } = msg.payload
-              //   channelShow(`[showConfirmation], ${message}`)
-
-              //   const answer = await vscode.window.showWarningMessage(
-              //     message,
-              //     {
-              //       modal: true,
-              //       detail: detail,
-              //     },
-              //     confirmText,
-              //   )
-              //   channelShow(`[user confirmation] ${answer}`)
-              //   panel!.webview.postMessage({
-              //     command: 'confirmationResponse',
-              //     payload: {
-              //       id,
-              //       confirmed: answer === confirmText,
-              //       decision: answer || 'Cancelled',
-              //       subject: title || message,
-              //     },
-              //   })
-              //   break
-
-              // case 'CreateCrudSupport':
-              //   console.log(
-              //     '[extension] createCRUDSupportPage command request from OrmThree.html',
-              //   )
-              //   const payload = JSON.parse(msg.payload)
-              //   // const payload = msg.payload
-              //   console.log(
-              //     '[extension] stringified payload',
-              //     JSON.stringify(payload),
-              //   )
-              //   console.log('[extension] calling generateParts payload')
-              //   generateParts(context, panel!, channel, paths, payload)
-              //   console.log('[extension]  sending crudSuportDone')
-              //   setTimeout(() => {
-              //     panel!.webview.postMessage({
-              //       command: 'crudSuportDone',
-              //     })
-              //   }, 3000)
-              //   break
-
-              // case 'fromAppSvelte':
-              //   console.log('[fromApp]', msg.payload)
-              //   break
-              // case 'progress':
-              //   console.log(msg.payload)
-              //   break
-
-              // case 'showInfo':
-              //   console.log(msg.message)
-              //   break
-              // case 'stepCompleted':
-              //   console.log(
-              //     '[extension] stepCompleted from',
-              //     msg.from,
-              //     ' to ',
-              //     msg.to,
-              //   )
-              //   panel!.webview.postMessage({
-              //     command: 'showPage',
-              //     page: 'OrmTwo',
-              //   })
-              //   break
-
-              // default:
-              //   console.log(`[extension] Unknown command: ${msg.command}`)
             }
           },
         )

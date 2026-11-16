@@ -1,6 +1,4 @@
 import * as vscode from 'vscode'
-import * as fs from 'fs'
-import * as path from 'path'
 
 function getNonce(): string {
   let text = ''
@@ -12,64 +10,56 @@ function getNonce(): string {
   return text
 }
 
-export function displayWebview(
+export async function displayWebview(
   context: vscode.ExtensionContext,
   panel: vscode.WebviewPanel,
-  initialPage: 'OrmOne' | 'OrmTwo' | 'OrmThree',
-): TResult {
-  // initialPage = 'index'
-  console.log('[Webview] displayWebview with initialPage', initialPage)
+  initialPage: 'OrmOne' | 'OrmThree',
+): Promise<TResult> {
+  console.log('[Webview] displayWebview with initialPage:', initialPage)
   try {
-    const html = loadMainMarkup(context, panel.webview, initialPage)
-    console.log(`[Webview] Setting panel.webview.html (length: ${html.length})`)
+    const html = await loadMainMarkup(context, panel.webview, initialPage)
     panel.webview.html = html
-    console.log(
-      '[Webview] displayWebview: HTML loaded into panel.webview.html successfully',
-    )
+
     setTimeout(() => {
       panel.webview.postMessage({
         command: 'showPage',
         page: initialPage,
       })
     }, 500)
-    console.log(`[Webview] displayWebview FINISHED successfully`)
+
     return { success: true }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
-    console.error(`[Webview] CRITICAL ERROR in displayWebview:`, msg)
+    console.error('[Webview] CRITICAL ERROR in displayWebview:', msg)
     return { success: false, error: msg }
   }
 }
 
-function loadMainMarkup(
+async function loadMainMarkup(
   context: vscode.ExtensionContext,
   webview: vscode.Webview,
   initialPage: string,
-): string {
-  console.log(
-    `[webview] loadMainMarkup: Injecting data-initial-page or window.__INITIAL_PAGE = ${initialPage}`,
+): Promise<string> {
+  // Always resolve compiled webview assets from context.extensionUri (never workspaceFolders)
+  const webviewAssetsUri = vscode.Uri.joinPath(
+    context.extensionUri,
+    'out',
+    'webview-assets',
   )
-  // const nonce = getNonce()
+  const htmlUri = vscode.Uri.joinPath(webviewAssetsUri, 'index.html')
 
-  // Locate the HTML file
-  const root =
-    vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ??
-    context.extensionUri.fsPath
-  if (!root) {
-    throw new Error('No workspace folder or extension root found.')
-  }
-
-  const htmlPath = path.join(root, 'out', 'webview-assets', `index.html`)
-
-  if (!htmlPath || !fs.existsSync(htmlPath)) {
-    console.log(
-      `[Webview] ⚠️ HTML not found for index.html, falling back to dev mode`,
+  let html = ''
+  try {
+    const fileBytes = await vscode.workspace.fs.readFile(htmlUri)
+    html = Buffer.from(fileBytes).toString('utf-8')
+  } catch {
+    console.warn(
+      `[Webview] index.html not found at ${htmlUri.toString()}, falling back to Vite dev server`,
     )
-    return getDevHtml(webview, 'index')
+    return getDevHtml(webview, initialPage)
   }
-  console.log(`[Webview] ✅ Using HTML: ${htmlPath}`)
-  let html = fs.readFileSync(htmlPath, 'utf-8')
-  // 2. Setup security items
+
+  // 1. Setup CSP and safe initial page injection
   const nonce = getNonce()
   const safeInitialPage = JSON.stringify(initialPage).replace(/</g, '\\u003c')
 
@@ -83,130 +73,45 @@ function loadMainMarkup(
     `media-src ${webview.cspSource};`,
   ].join(' ')
 
-  // 3. Inject CSP Meta Tag
+  // 2. Inject CSP Meta Tag
   html = html.replace(
     /<\/head>/i,
     `  <meta http-equiv="Content-Security-Policy" content="${csp}">\n</head>`,
   )
 
-  // 4. Inject initial page data attribute on root div
+  // 3. Inject initial page data attribute on root div
   html = html.replace(
     '<div id="app"></div>',
     `<div id="app" data-initial-page="${initialPage}"></div>`,
   )
 
-  // 5. Transform all relative stylesheet hrefs (./assets/...) to webview URIs
+  // 4. Rewrite all relative asset paths (./assets/... and ./favicon.png) to webview URIs
+  // Handles stylesheets, module scripts, modulepreload links, and favicons regardless of attribute order
   html = html.replace(
-    /<link\s+([^>]*?)href="\.\/assets\/([^"]+)"/gi,
-    (match, prefix, fileName) => {
-      const fileUri = vscode.Uri.joinPath(
-        context.extensionUri,
-        'out',
-        'webview-assets',
-        'assets',
-        fileName,
-      )
-      const webviewUri = webview.asWebviewUri(fileUri)
-      return `<link ${prefix}href="${webviewUri}"`
+    /\b(href|src)="\.\/([^"]+)"/gi,
+    (_match, attr: string, relPath: string) => {
+      const segments = relPath.split('/')
+      const assetUri = vscode.Uri.joinPath(webviewAssetsUri, ...segments)
+      const webviewUri = webview.asWebviewUri(assetUri)
+      return `${attr}="${webviewUri}"`
     },
   )
 
-  // 6. Inject inline initial state script AND convert module script src to webview URI with Nonce
-  html = html.replace(
-    /<script\s+type="module"\s+crossorigin\s+src="\.\/assets\/([^"]+)"><\/script>/gi,
-    (match, fileName) => {
-      const fileUri = vscode.Uri.joinPath(
-        context.extensionUri,
-        'out',
-        'webview-assets',
-        'assets',
-        fileName,
-      )
-      const webviewUri = webview.asWebviewUri(fileUri)
+  // 5. Add nonce to all <script> tags and inject window.__INITIAL_PAGE before the first script
+  let injectedGlobal = false
+  html = html.replace(/<script\b([^>]*)>/gi, (_match, attrs: string) => {
+    const withNonce = attrs.includes('nonce=')
+      ? `<script${attrs}>`
+      : `<script nonce="${nonce}"${attrs}>`
 
-      return `<script nonce="${nonce}">
-    window.__INITIAL_PAGE = ${safeInitialPage};
-  </script>
-  <script type="module" nonce="${nonce}" crossorigin src="${webviewUri}"></script>`
-    },
-  )
+    if (!injectedGlobal) {
+      injectedGlobal = true
+      return `<script nonce="${nonce}">window.__INITIAL_PAGE = ${safeInitialPage};</script>\n  ${withNonce}`
+    }
+    return withNonce
+  })
 
   return html
-  //------- gemini -------
-  // const htmlPath = vscode.Uri.joinPath(
-  //   context.extensionUri,
-  //   'out',
-  //   'webview-assets',
-  //   'index.html',
-  // )
-
-  // === BEST FIX: Rebuild all asset URLs using asWebviewUri ===
-  // const assetsFolder = vscode.Uri.joinPath(
-  //   context.extensionUri,
-  //   'out',
-  //   'webview-assets',
-  // )
-
-  // html = html.replace(
-  //   /(src|href)=["'](\.\/)?([^"']+)["']/gi,
-  //   (fullMatch, attr, dotSlash, relativePath) => {
-  //     // Skip external or already-processed URLs
-  //     if (
-  //       relativePath.startsWith('http') ||
-  //       relativePath.startsWith('data:') ||
-  //       relativePath.startsWith('#')
-  //     ) {
-  //       return fullMatch
-  //     }
-
-  //     try {
-  //       const assetUri = webview.asWebviewUri(
-  //         vscode.Uri.joinPath(assetsFolder, relativePath),
-  //       )
-  //       return `${attr}="${assetUri}"`
-  //     } catch (err) {
-  //       console.log(`Failed to convert asset: ${relativePath}`)
-  //       return fullMatch
-  //     }
-  //   },
-  // )
-
-  // console.log(`[webview] raw ${initialPage}html length: ${html.length}`)
-  // // Inject CSP
-  // const csp = [
-  //   `default-src 'none';`,
-  //   `img-src ${webview.cspSource} https: data: blob:;`,
-  //   `style-src ${webview.cspSource} 'unsafe-inline';`,
-  //   // `script-src ${webview.cspSource} 'nonce-${nonce}';`,
-  //   `script-src ${webview.cspSource} 'nonce-${nonce}' 'unsafe-eval';`,
-  //   `font-src ${webview.cspSource} data:;`,
-  //   // `connect-src ${webview.cspSource};`, // Allows source maps
-  //   `connect-src ${webview.cspSource} https: blob:;`,
-  // ].join(' ')
-
-  // html = html.replace(
-  //   /<\/head>/i,
-  //   `<meta http-equiv="Content-Security-Policy" content="${csp}">\n</head>`,
-  // )
-  // html = html.replace(
-  //   '<div id="app"></div>',
-  //   `<div id="app" data-initial-page="${initialPage}"></div>`,
-  // )
-  // const safeInitialPage = JSON.stringify(initialPage).replace(/</g, '\\u003c')
-  // // Inject initial page as global variable
-  // html = html.replace(
-  //   '<script type="module"',
-  //   `<script>
-  //     window.__INITIAL_PAGE = ${safeInitialPage};
-  //   </script>
-  //   <script type="module" nonce="${nonce}" src="${scriptUri}`,
-  // )
-  // console.log(`[Webview] Final HTML length: ${html.length}`)
-  // console.log(
-  //   `[Webview] HTML contains __INITIAL_PAGE:`,
-  //   html.includes(initialPage),
-  // )
-  // return html
 }
 
 function getDevHtml(webview: vscode.Webview, initialPage: string): string {
@@ -221,7 +126,6 @@ function getDevHtml(webview: vscode.Webview, initialPage: string): string {
 </head>
 <body>
   <div id="app"></div>
-  <!-- this src as a prop for <script is new for me -->
   <script type="module" src="${devUrl}"></script>
 </body>
 </html>

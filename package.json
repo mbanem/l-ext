@@ -31,19 +31,14 @@
     ]
   },
   "scripts": {
-    "check": "tsc --noEmit && pnpm --filter ./src/webview-ui check",
-    "pack": "vsce package",
-    "publish": "vsce publish",
-    "compile": "tsc -p .",
-    "build:webview": "cd src/webview-ui && pnpm run build",
-    "build": "pnpm compile && pnpm build:webview",
-    "vscode:prepublish": "pnpm build",
-    "package-x": "vsce package --no-dependencies --allow-package-all-secrets --allow-package-env-file",
-    "package": "vsce package --no-dependencies --no-yarn --allow-package-all-secrets --allow-package-env-file",
-    "ix": "pnpm package && VERSION=$(jq -r '.version' package.json) && code --install-extension l-ext-${VERSION}.vsix --force",
-    "rx-x": "node scripts/rx.js",
-    "rx": "clear; rm -rf *.vsix out .env prisma prisma.config.ts node_modules/.cache node_modules/.vite; printf \"NODE_ENV=development\\nDATABASE_URL=postgresql://mili:kiki-fake@localhost:5432/forms?schema=public\" > .env; pnpm ix"
-  },
+  "check": "tsc --noEmit && pnpm --filter ./src/webview-ui check",
+  "compile": "tsc -p . --noEmit && rm -rf out && esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node20 --external:vscode --outfile=out/extension.js --sourcemap",
+  "build:webview": "cd src/webview-ui && pnpm run build",
+  "build": "pnpm compile && pnpm build:webview",
+  "vscode:prepublish": "pnpm build",
+  "package": "vsce package --no-dependencies",
+  "ix": "pnpm run package && VERSION=$(jq -r '.version' package.json) && code --install-extension l-ext-${VERSION}.vsix --force"
+},
   "devDependencies": {
     "@eslint/compat": "^2.1.0",
     "@eslint/js": "^10.0.1",
