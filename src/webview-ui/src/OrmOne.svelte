@@ -12,6 +12,7 @@
   let mandatoryEntriesEl: HTMLDivElement
   let validateDbParams: HTMLDivElement
   let dbDepondOnRoleEl: HTMLDivElement
+  let rawLineEl: HTMLElement
   // let deleteSelectedEl: HTMLButtonElement
   let cbGroup: string[] = $state([])
   let verifyDbParamsEl=$state<HTMLButtonElement>()
@@ -25,8 +26,7 @@
   let arrDBParamsStatus: string[] = $state([])
   // Vite will bundle/copy this asset automatically at build time
 
-  const RX =
-    /^Progress:|\.\.\.\/node_modules\/|dependencies:|devDependencies:|\+ /
+  const RX =  /^Progress:|\.\.\.\/node_modules\/|dependencies:|devDependencies:|\+ /
   // let currentDetailsEl: HTMLDetailsElement | undefined = $state()
   let rlCounter = $state(0)
   // let rawLinesEl: HTMLDetailsElement
@@ -218,7 +218,7 @@
 // is shown, so when user close tooltip we collapse db params (isOpen set to false) 
 
 function validateMsgClosed(){
-  // console.log('[OrmOne] tooltipOnClose CALLED')
+  console.log('[OrmOne] tooltipOnClose CALLED')
   // isOpen = false
 }
   // let dbStatusMsg = $state('')
@@ -227,6 +227,7 @@ function validateMsgClosed(){
     vscode.postMessage({
       command: 'checkOnPendingFile',
     })
+
     const handler = (event: MessageEvent) => {
       const msg = event.data
       switch (msg.command) {
@@ -234,6 +235,7 @@ function validateMsgClosed(){
           //// console.log('[OrmOne] got message prismaInistallStart')
           currentTask = 'installing PNPM packages...'
           break
+
         case 'pending-found-editor-loaded=schema-env':
           configRequired = true
           break
@@ -275,8 +277,9 @@ function validateMsgClosed(){
             },
           )
           break
+
         case 'prismaPartOneDone':
-          //// console.log('[OrmOne] got message', msg.command, msg.payloads)
+          console.log('[OrmOne] got message', msg.command, msg.payloads)
           //// console.log('[OrmOne] postMessage prismaPartTwo')
           // vscode.postMessage({
           //   command: 'prismaPartTwo',
@@ -284,10 +287,13 @@ function validateMsgClosed(){
           // })
           break
         case 'prismaProgress':
-          // console.log('[msg]',msg)
-          progressPercents = Number(msg.percent)
-          statusMessage = msg.message
-          const rl = msg.rawLine
+          // Ensure we fallback gracefully if percent is missing
+          progressPercents = typeof msg.percent === 'number' ? Math.round(msg.percent) : (progressPercents + 5 > 95 ? 95 : progressPercents + 5);
+          statusMessage = msg.message || 'Installing packages...';
+          if (msg.rawLine) {
+            const rl = msg.rawLine;
+            // rawLineEl.innerHTML +=`${rl}
+            // `;
           // pEl = document.createElement('p')
           // rawLinesEl.appendChild(pEl)
           // if (rl.includes('[WARN] Issues with peer dependencies found.')) {
@@ -303,12 +309,11 @@ function validateMsgClosed(){
           if (m) {
             //// console.log('M[0] RAW LINE', m[0] ?? 'NULL', rl)
             if (m[0] && !progressCollector[m[0]]) {
-              $inspect('create empty progressCollector for', m[0])
               progressCollector[m[0]] = []
             }
-            progressMsg = msg.rawLine.slice(10).trim()
+            progressMsg = rl.slice(10).trim()
             progressCollector[m[0]].push(progressMsg)
-            $inspect('progressCollector[m[0]]', progressCollector[m[0]])
+          }
             // p[m[0]] = rl.trim()
             // switch (m[0]) {
             //   case 'Progress:':
@@ -371,6 +376,15 @@ function validateMsgClosed(){
           break
 
         case 'prismaInit':
+          tooltip.show(
+            verifyDbParamsEl as HTMLButtonElement,
+            'Packages installed successfully\nInitiating Prisma ORM...',
+            0,
+            'below'
+          );
+          currentTask = msg.message || 'Initiating Prisma ORM...';
+          break; // <-- Added missing break!
+
         case 'createRoleAndDb':
         case 'openFilesInEditor':
         case 'prismaMigrate':
@@ -380,7 +394,7 @@ function validateMsgClosed(){
           break
 
         case 'prismaPartOneFailed':
-        //// console.log('[OrmOne] got installPrisma failed')
+        console.log('[OrmOne] got installPrisma failed')
         // case 'verifyDbParamsEl':
         //   dropMessage = msg.message
         // const tt = new CRTooltip()
@@ -394,7 +408,7 @@ function validateMsgClosed(){
         //       color: 'navy',
         //     },
         //   )
-        //   break
+          break
       }
     }
     window.addEventListener('message', handler)
@@ -502,13 +516,15 @@ function validateMsgClosed(){
       dbParams: JSON.stringify(db_),
     })
   }
-
+  function emptyField(k:string){
+    return dbState.db[`${k}`]===''
+  }
 </script>
 <p>dbParamsMissing {dbParamsMissing}</p>
 <div
   class="mandatory-entries"
   bind:this={mandatoryEntriesEl}
-  style="opacity:0;"
+  style="opacity:0; pointer-events:none; position:absolute;"
 >
   <p>Without Credentials for Managing DB</p>
   <p>Role and DB cannot be created and</p>
@@ -591,7 +607,7 @@ Package Manager e.g. pnpm.
       configRequired = false
     }}>will work on it</button
   >
-  <button onclick={closetheApp}>Close and will restar later</button>
+  <button onclick={closetheApp}>Close and will restart later</button>
 {:else}
   <div class="db-params-block">
     <details
@@ -599,22 +615,16 @@ Package Manager e.g. pnpm.
       style="position:relative;z-index:2;cursor:pointer;"
     >
       <summary class="summary">Parameters for Creating Database </summary>
-      <div
-        class="dbname-block"
-        style="border: 1px solid gray;width:19.4rem;padding:0.5rem;
-			border-radius: 6px;margin-top:0.1rem;
-			color: var(--candidate-color);
-			background-color: var(--candidate-bg-color);"
-      >
+      <div class="dbname-block">
         {#each Object.entries(inputBoxes) as [k, v] (k)}
           <label>
             {v[0]}
             <input
               type={v[1]}
-              bind:value={dbState.db[`${k}`]}
+              bind:value={dbState.db[k]}
               bind:this={dbState.els[`${k}El`]}
               onblur={markEmptyDbParamFields}
-              style={inputStyle}
+              class:empty-field={emptyField(k)}
             />
           </label>
         {/each}
@@ -682,7 +692,7 @@ Package Manager e.g. pnpm.
     </div>
     <div class="buttons-row">
       <button
-        cLass="button-install"
+        class="button-install"
         onclick={startPrismaInstall}
         onmouseenter={showMandatoryEntries}
         onmouseleave={()=>{tooltip.hide();}}
@@ -713,8 +723,13 @@ Package Manager e.g. pnpm.
     </div>
   {/if}
 {/if}
-<p>dbParamsMissing {dbParamsMissing}</p>
+<pre bind:this={rawLineEl} class='row-lines'></pre>
 <style lang="scss">
+.row-lines{
+  @include border($padding:0.5rem 1rem);
+  max-height:15rem;
+  overflow-y:auto;
+}
   .page-info {
     @include page-info();
     margin-top: 1.5rem;
@@ -783,6 +798,7 @@ Package Manager e.g. pnpm.
     background-color: transparent;
     padding: 0;
     gap: 1rem;
+    z-index:50;
   }
   .buttons-row {
     display: flex;
@@ -796,7 +812,7 @@ Package Manager e.g. pnpm.
       display: flex;
       display: inline-block;
       outline: none;
-      margin-left: 10rem;
+      margin-left: 4rem;
       border: 1px solid gray;
       border-radius: 5px;
       padding: 3px 1rem;
@@ -861,6 +877,7 @@ Package Manager e.g. pnpm.
     grid-template-columns: repeat(2, 40vw);
     gap: 1rem;
     margin-top: 4rem;
+
     .left-column {
       border: 1px solid gray;
       border-radius: 8px;
@@ -869,35 +886,26 @@ Package Manager e.g. pnpm.
       background-color: var(--candidate-bg-color);
       width: 39vw;
     }
-    // .left_column {
-    //   .progress-line {
-    //     @include progress-field();
-    //     margin-top: 0.5rem;
-    //   }
-    // }
+
     .right-column {
       width: 39vw;
       .dependencies-list {
         @include progress-field();
         height: clamp(2rem, 5rem, 10rem);
       }
-      // .dev-dependencies-list {
-      //   @include progress-field();
-      //   height: clamp(2rem, 4rem, 6rem);
-      // }
     }
-
+  }
     .progress-title {
-      display: inline-block;
-      color: var(--candidate-color);
-      background-color: var(--candidate-bg-title-color);
-      font-weight: 600;
-      width: 95%;
-      & ~ p {
-        padding-left: 0.5rem;
-        font-weight: 400;
-      }
+    display: inline-block;
+    color: var(--candidate-color);
+    background-color: var(--candidate-bg-title-color);
+    font-weight: 600;
+    width: 95%;
+    & ~ p {
+      padding-left: 0.5rem;
+      font-weight: 400;
     }
+  }
     .overflow-y {
       overflow-y: auto;
     }
@@ -916,36 +924,35 @@ Package Manager e.g. pnpm.
 
     // NOTE many css classes do not work so inline styles are often used
     .dbname-block {
-      position: absolute;
-      top: 2rem;
-      left: 0;
-      @include container($caption: 'Database Parameters');
-      margin: 0;
-      padding: 1rem;
-      label {
-        width: 10rem;
-        padding: 0;
-        margin: 0 1rem 6px 0;
-        color: var(--candidate-color);
-      }
+    position: absolute;
+    top: 2rem;
+    left: 0;
+    @include container($caption: 'Database Parameters');
+    border: 1px solid gray;
+    width: 19.4rem;
+    padding: 0.5rem;
+    border-radius: 6px;
+    margin-top: 0.1rem;
+    color: var(--candidate-color);
+    background-color: var(--candidate-bg-color);
 
-      input[type='text'],
-      input[type='number'] {
-        display: block;
-        width: 18rem;
-        height: 1.5rem !important;
-        margin: 8px 0 10px 0;
-        padding: 6px 1rem 8px 1rem;
-        border-radius: 4px;
-        outline: none;
-      }
+    label {
+      display: block;
+      width: 10rem;
+      padding: 0;
+      margin: 0 1rem 6px 0;
+      color: var(--candidate-color);
     }
-  }
-  input,
-  label {
-    display: block;
-    // height: 1rem !important;
-    // margin-bottom: 10px;
+
+    input {
+      display: block;
+      width: 18rem;
+      height: 1.5rem !important;
+      margin: 8px 1rem 10px 0;
+      padding: 6px 0.5rem 8px 1rem;
+      border-radius: 4px;
+      outline: none;
+    }
   }
   .summary {
     position: relative;
@@ -973,11 +980,12 @@ Package Manager e.g. pnpm.
     overflow: hidden;
     transition: all 0.2s ease;
   }
-  .mandatory-entries,
+    .mandatory-entries,
   .cannot-remove-role {
     position: absolute;
     top: 0;
     left: 0;
+    pointer-events: none; // <-- Prevents invisible tooltip templates from stealing clicks!
     @include container($caption: 'Database Params');
     height: auto;
     color: var(--candidate-color);
@@ -994,6 +1002,7 @@ Package Manager e.g. pnpm.
       margin: 0;
     }
   }
+
   .cannot-remove-role {
     @include container(
       $caption: 'Not Allowed',
@@ -1034,22 +1043,22 @@ Package Manager e.g. pnpm.
     
   }
 
-  .db-params-status{
-    @include container($caption: 'Delete Selected DB Objects');
-    position: absolute;
-    left: 0;
-    bottom: 100%; /* Align bottom edge of container to top edge of button */
-    margin-bottom: 8px; /* Spacing above button */
-    width: max-content;
-    // padding: 0.5rem 1rem;
-    font-size: 12px;
-    white-space: nowrap;
-    z-index: 10;
-    p{
-      padding:0 !important;
-      margin:0 !important;
-    }
-  }
+  // .db-params-status{
+  //   @include container($caption: 'Delete Selected DB Objects');
+  //   position: absolute;
+  //   left: 0;
+  //   bottom: 100%; /* Align bottom edge of container to top edge of button */
+  //   margin-bottom: 8px; /* Spacing above button */
+  //   width: max-content;
+  //   // padding: 0.5rem 1rem;
+  //   font-size: 12px;
+  //   white-space: nowrap;
+  //   z-index: 10;
+  //   p{
+  //     padding:0 !important;
+  //     margin:0 !important;
+  //   }
+  // }
   .current-task {
     grid-column: span 3;
     display: flex;
@@ -1060,5 +1069,8 @@ Package Manager e.g. pnpm.
     span {
       margin-right: 7px;
     }
+  }
+  .empty-field{
+    background-color: #f4cdcd;
   }
 </style>

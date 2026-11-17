@@ -1,16 +1,20 @@
 <script lang="ts">
   import { slide } from 'svelte/transition'
 
-  let props = $props<{
+  type TProps={
     summary: string
     details: string[]
-  }>()
+  }
+  let props:TProps = $props()
+
   const colors = {
     over: 'green',
     out: 'blue',
   }
+
   $inspect('comp sum/det', props.summary, props.details)
   let isOpen = $state(false)
+  
 </script>
 
 <details
@@ -22,7 +26,7 @@
   <!-- Standard JS preventDefault inside the Svelte 5 event attribute -->
   <summary
     onclick={(e) => e.preventDefault()}
-    style:color={isOpen ? props.colors.out : ''}
+    style:color={isOpen ? colors.out : ''}
     >{props.summary} ({props.details.length})</summary
   >
 

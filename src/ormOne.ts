@@ -3,7 +3,7 @@ import { Client } from 'pg'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { runCommandStream } from './run-command-stream.js'
-import { CommandResultTracker, isFile } from './extension.js'
+import { CommandResultTracker, isFile, show } from './extension.js'
 import { parsePrismaSchema } from './webview-ui/src/lib/utils/parse-prisma-schema.js'
 import { anyMissing } from './webview-ui/src/lib/utils/index.js'
 
@@ -56,7 +56,8 @@ async function readUriText(uri: vscode.Uri): Promise<string> {
   } catch {
     return ''
   }
-} setupOrmOneMessageHandler
+}
+setupOrmOneMessageHandler
 
 async function writeUriText(uri: vscode.Uri, text: string): Promise<void> {
   // Ensure parent directory exists (e.g., prisma/ before prisma init finishes)
@@ -238,20 +239,23 @@ export async function setupOrmOneMessageHandler(
   const messageListener = webview.onDidReceiveMessage(async (msg) => {
     switch (msg.command) {
       case 'checkOnPendingFile':
+        show(`case checkOnPendingFile`)
         await handleCheckOnPendingFile()
         break
 
       case 'installPrisma': {
         console.log('[ormOne] Received installPrisma message:', msg)
+
         const installRes = await handleInstallPrisma(msg)
+        show(['[ormOne] after installPrisma:', installRes.success ? 'true' : 'false'])
         webview.postMessage({
           command: 'prismaInstallStatus',
           result: installRes,
         })
-        break
       }
+        break
 
-      case 'checkDbParams': {
+      case 'checkDbParams': { // local scope
         const dbParams: DbParams = JSON.parse(msg.dbParams)
         const res = await getDbParamsStatus(dbParams)
         webview.postMessage({
@@ -322,13 +326,15 @@ export async function setupOrmOneMessageHandler(
 // ====================== Handlers ======================
 
 async function handleCheckOnPendingFile() {
+  show(`handleCheckOnPendingFile entry point`)
   const hasPending = (await isFile(paths.pending)) || (await isFile(paths.notVerified))
   if (hasPending) {
     const result = await openFilesInEditorTabs([paths.schema, paths.env])
     if (!result.success) {
       console.error('[ormOne] openFilesInEditorTabs failed', result)
+    } else {
+      webview.postMessage({ command: 'pending-found-editor-loaded=schema-env' })
     }
-    webview.postMessage({ command: 'pending-found-editor-loaded=schema-env' })
   }
 }
 
@@ -353,24 +359,34 @@ async function handleInstallPrisma(
 
     const installResult = await installPackages()
     if (!installResult.success) {
+      show(['installPackages', 'error', installResult.stderr, JSON.stringify(installResult.error, null, 2)]);
       throw new Error(
         installResult.error?.message || 'Package installation failed',
       )
+    } else {
+      show(`installPackages succeeded`)
     }
-
     // 2. Run prisma init
     webview.postMessage({
       command: 'prismaInit',
       message: 'Initiating Prisma ORM...',
     })
+    show(`before runPrismaInit`)
+    const binPrismaUri = vscode.Uri.joinPath(paths.root, 'node_modules', '.bin', 'prisma')
+    await deleteUriIfExists(binPrismaUri)
     const initResult = await runPrismaInit()
     if (!initResult.success) {
+      show(['runPrismaInit', 'error', initResult.stderr, JSON.stringify(initResult.error, null, 2)])
       throw new Error(initResult.error?.message || 'prisma init failed')
-    }
 
+    } else {
+      show(`runPrismaInit succeeded`)
+    }
+    show(`before cleanupPrismaSkillFolders`)
     // Clean up Prisma CLI generated AI skill folders so they don't clutter the user's repo
     await cleanupPrismaSkillFolders()
 
+    show(`before configureEnvFile`)
     // 3. Configure .env
     await configureEnvFile(dbParams)
 
@@ -378,23 +394,29 @@ async function handleInstallPrisma(
     if (dbParams.adminName && dbParams.adminPwd) {
       const dbResult = await createRoleAndDatabase(dbParams)
       if (!dbResult.success) {
+        show(['installPackages', 'error', dbResult.stderr, JSON.stringify(dbResult.error, null, 2)]);
         webview.postMessage({
           command: 'prismaInstallError',
           message: 'Failed to create PostgreSQL role/database',
           error: dbResult.error?.message,
         })
+      } else {
+        show(`createRoleAndDatabase succeeded`)
       }
     }
-
+    show(`[ormOne] postMsg openFilesInEditor`)
     // 5. Open schema.prisma and .env in Editor tabs & write pending marker
     webview.postMessage({
       command: 'openFilesInEditor',
       message: 'Opening schema.prisma and .env DATABASE_URL in Editor...',
     })
 
+    show(`[ormOne] openFilesInEditorTabs`)
     const openResult = await openFilesInEditorTabs([paths.schema, paths.env])
     if (!openResult.success) {
       console.error('[ormOne] openFilesInEditorTabs failed', openResult)
+    } else {
+      show(`[ormOne] createPendingFile`)
     }
     await createPendingFile()
 
@@ -407,7 +429,7 @@ async function handleInstallPrisma(
   } catch (err: any) {
     const message = err instanceof Error ? err.message : String(err)
     console.error('[ormOne] handleInstallPrisma error:', message)
-
+    show([`[ormOne] error`, message])
     webview.postMessage({
       command: 'prismaInstallError',
       message: 'Installation failed',
@@ -423,12 +445,13 @@ async function handleInstallPrisma(
 
 async function prismaMigrateAndGenerate(): Promise<CommandResultTracker<boolean>> {
   try {
+    show(`[ormOne] prismaMigrateAndGenerate entry`)
     const args = getPrismaCommandArgs()
     webview.postMessage({
       command: 'prismaMigrate',
       message: 'schema.prisma is valid. Migrating schema models to database...',
     })
-
+    show(`[ormOne] prismaMigrate`)
     let result = await executeCommand('pnpm', args.migrate)
 
     if (result.success) {
@@ -436,10 +459,19 @@ async function prismaMigrateAndGenerate(): Promise<CommandResultTracker<boolean>
         command: 'prismaGenerate',
         message: 'schema.prisma is valid. Generating supporting modules...',
       })
+      show([
+        'Prisma init command',
+        'pnpm',
+        JSON.stringify(args.init),
+        'Working directory',
+        paths.root.fsPath,
+      ])
       result = await executeCommand('pnpm', args.generate)
+      show(`[ormOne] prisma generate`)
     }
 
     if (!result.success) {
+      show(`[ormOne] prisma migrate and generate failed`)
       console.error('[ormOne] prisma migrate and generate failed', result)
     }
     return result
@@ -454,132 +486,236 @@ async function prismaMigrateAndGenerate(): Promise<CommandResultTracker<boolean>
 
 // ====================== CLI & Package Helpers ======================
 
+// function getPrismaCommandArgs(): TPrismaCommandArgs {
+//   return {
+//     init: ['dlx', 'prisma@7', 'init', '--no-skills', '--datasource-provider', 'postgresql'],
+//     migrate: ['prisma', 'migrate', 'dev', '--name', 'init'],
+//     generate: ['prisma', 'generate'],
+//   }
+// }
+// function getPrismaCommandArgs(): TPrismaCommandArgs {
+//   return {
+//     init: [
+//       'exec',
+//       'prisma',
+//       'init',
+//       '--datasource-provider',
+//       'postgresql',
+//     ],
+
+//     migrate: [
+//       'exec',
+//       'prisma',
+//       'migrate',
+//       'dev',
+//       '--name',
+//       'init',
+//     ],
+
+//     generate: [
+//       'exec',
+//       'prisma',
+//       'generate',
+//     ],
+//   }
+// }
 function getPrismaCommandArgs(): TPrismaCommandArgs {
   return {
-    init: ['prisma', 'init', '--datasource-provider', 'postgresql'],
-    migrate: ['prisma', 'migrate', 'dev', '--name', 'init'],
-    generate: ['prisma', 'generate'],
+    init: [
+      'dlx',
+      'prisma@7',
+      'init',
+      '--datasource-provider',
+      'postgresql',
+      '--with-model',
+      '--no-skills',
+    ],
+
+    migrate: [
+      'exec',
+      'prisma',
+      'migrate',
+      'dev',
+      '--name',
+      'init',
+    ],
+
+    generate: [
+      'exec',
+      'prisma',
+      'generate',
+    ],
   }
 }
-
-async function installPackages(): Promise<CommandResultTracker<boolean>> {
-  // Deduplicated devDependencies list
-  const devPackages = Array.from(
-    new Set([
-      '@eslint/compat',
-      '@eslint/js',
-      '@prisma/adapter-pg',
-      '@prisma/config',
-      '@prisma/internals',
-      '@sveltejs/vite-plugin-svelte',
-      '@tsconfig/svelte',
-      '@types/bcrypt',
-      '@types/eslint',
-      '@types/node',
-      '@types/pg',
-      '@types/vscode',
-      '@typescript-eslint/eslint-plugin',
-      '@typescript-eslint/parser',
-      'concurrently',
-      'esbuild',
-      'eslint',
-      'eslint-config-prettier',
-      'eslint-plugin-svelte',
-      'globals',
-      'postcss',
-      'postcss-load-config',
-      'prettier',
-      'prettier-plugin-svelte',
-      'prisma',
-      'sass',
-      'sass-embedded',
-      'svelte',
-      'svelte-check',
-      'svelte-preprocess',
-      'ts-node',
-      'tslib',
-      'typescript',
-      'typescript-eslint',
-      'vite',
-      'vite-plugin-sass-dts',
-    ]),
-  )
-
-  const packages = [
+const devPackages = Array.from(
+  new Set([
+    '@eslint/compat',
+    '@eslint/js',
     '@prisma/adapter-pg',
-    '@prisma/client',
+    '@prisma/config',
+    '@prisma/internals',
+    '@sveltejs/vite-plugin-svelte',
+    '@tsconfig/svelte',
+    '@types/bcrypt',
+    '@types/eslint',
+    '@types/node',
+    '@types/pg',
+    '@types/vscode',
+    '@typescript-eslint/eslint-plugin',
+    '@typescript-eslint/parser',
+    'concurrently',
+    'esbuild',
+    'eslint',
+    'eslint-config-prettier',
+    'eslint-plugin-svelte',
+    'globals',
+    'postcss',
+    'postcss-load-config',
+    'prettier',
+    'prettier-plugin-svelte',
+    'prisma@7',
+    'sass',
+    'sass-embedded',
+    'svelte',
+    'svelte-check',
+    'svelte-preprocess',
+    'ts-node',
+    'tslib',
+    'typescript@6.0.3',
+    'typescript-eslint',
+    'vite',
+    'vite-plugin-sass-dts',
+  ]),
+)
+
+const packages = Array.from(
+  new Set([
+    '@prisma/adapter-pg',
+    '@prisma/client@7',
     '@prisma/internals',
     'bcrypt',
     'dotenv',
     'pg',
-  ]
+  ]),
+)
+async function installPackages(): Promise<CommandResultTracker<boolean>> {
+  // Deduplicated devDependencies list
 
-  return await runCommandStream('pnpm', ['add', '-D', ...devPackages], {
-    // IMPORTANT: Child processes require a native OS string path, not a vscode.Uri
-    cwd: paths.root.fsPath,
-    timeoutMs: 10 * 60 * 1000,
-    onProgress: (p) => {
-      webview.postMessage({
-        command: 'prismaProgress',
-        percent: p.percent ?? 0,
-        message: p.done ? 'Finalizing...' : 'Installing packages...',
-        rawLine: p.rawLine,
-      })
-    },
-    onStdout: (text) => {
-      webview.postMessage({ command: 'prismaLog', type: 'stdout', text })
-    },
-    onStderr: (text) => {
-      webview.postMessage({ command: 'prismaLog', type: 'stderr', text })
-    },
-  })
+  let result = new CommandResultTracker<boolean>(false)
+  for (const addPackages of [['add', '-D', ...devPackages], ['add', ...packages]]) {
+    result.command = `installing ${addPackages[2]}`
+    result = await runCommandStream('pnpm', [...addPackages], {
+      // IMPORTANT: Child processes require a native OS string path, not a vscode.Uri
+      cwd: paths.root.fsPath,
+      timeoutMs: 10 * 60 * 1000,
+      onProgress: (p) => {
+        let computedPercent = p.percent || '';
+        // if (typeof computedPercent !== 'number' || isNaN(computedPercent)) {
+        //   computedPercent = 0; // Safe fallback progress indicator
+        // }
+        webview.postMessage({
+          command: 'prismaProgress',
+          percent: computedPercent,
+          message: p.done ? 'Finalizing package installation...' : 'Installing packages...',
+          rawLine: p.rawLine,
+        })
+        show(`onProgress % ${computedPercent} ${p.rawLine}`)
+      },
+      onStdout: (text) => {
+        webview.postMessage({ command: 'prismaLog', type: 'stdout', text })
+        show([`onStdout`, text])
+      },
+      onStderr: async (text) => {
+        show([`onStderr`, text])
+        if (text.includes('pnpm approve-builds')) {
+          await runCommandStream('pnpm', ['approve-builds'], {
+            cwd: paths.root.fsPath,
+          })
+        }
+        webview.postMessage({ command: 'prismaLog', type: 'stderr', text })
+      },
+    })
+    if (!result.success) {
+      show(['[ormOne] installPackages failed', JSON.stringify(result, null, 2)])
+    }
+  }
+  return result
 }
+
 
 async function executeCommand(
   engine: string,
   args: string[],
 ): Promise<CommandResultTracker<boolean>> {
-  const result = new CommandResultTracker<boolean>(true)
+  const result = new CommandResultTracker<boolean>(false)
+
   try {
     const { stdout, stderr } = await execFileAsync(engine, args, {
       cwd: paths.root.fsPath,
       timeout: 30000,
     })
 
+    result.stdout = stdout || ''
+    result.stderr = stderr || ''
+
     if (stdout) {
-      console.log('[ormOne] prisma stdout', stdout)
+      show(['executeCommand', 'stdout', stdout])
     }
 
-    if (stderr && !stderr.startsWith('Loaded Prisma config ')) {
-      console.warn('[ormOne] prisma command stderr', stderr)
-      result.setSuccess(false)
-      result.stderr = stderr
-      return result
+    if (stderr) {
+      console.warn('[ormOne] command stderr:', stderr)
+      show(['executeCommand', 'stderr', stderr])
     }
 
     webview.postMessage({
       command: 'prismaLog',
-      text: stdout || stderr || 'Done',
+      text: [stdout, stderr].filter(Boolean).join('\n') || 'Done',
     })
 
+    // execFileAsync resolved: process exited successfully.
     result.setSuccess(true)
+
   } catch (error: any) {
-    console.error('[ormOne] executeCommand error:', error)
     result.setSuccess(false)
-    result.stderr = error.message || 'Command execution failed'
-    result.error = error instanceof Error ? error : new Error(result.stderr)
+
+    result.stdout = error.stdout || ''
+    result.stderr = error.stderr || error.message || 'Command execution failed'
+    result.error = error instanceof Error
+      ? error
+      : new Error(result.stderr)
+
+    show(['executeCommand', 'FAILED', result.stderr])
   }
+
   return result
 }
 
 async function runPrismaInit(): Promise<CommandResultTracker<boolean>> {
+  show(['runPrismaInit', 'entry point'])
+
   const args = getPrismaCommandArgs()
+
+  show([
+    'Prisma init command',
+    'pnpm',
+    JSON.stringify(args.init),
+    'Working directory',
+    paths.root.fsPath,
+  ])
   const cmdRes = await executeCommand('pnpm', args.init)
-  if (!cmdRes.success) {
-    cmdRes.error = new Error(cmdRes.stderr || 'Prisma init failed')
-  }
+
+  show([
+    'runPrismaInit',
+    cmdRes.success ? 'succeeded' : 'FAILED',
+    `success: ${cmdRes.success}`,
+    `stdout: ${cmdRes.stdout || ''}`,
+    `stderr: ${cmdRes.stderr || ''}`,
+    `error: ${cmdRes.error?.message || ''}`,
+  ])
+
   return cmdRes
 }
+
 
 async function cleanupPrismaSkillFolders(): Promise<void> {
   const unwanted = ['.agents', '.claude', '.windsurf', 'skills-lock.json']
@@ -591,6 +727,7 @@ async function cleanupPrismaSkillFolders(): Promise<void> {
       // Ignore if Prisma did not generate that folder
     }
   }
+  show(`deleted .agent .clauds .windsurf .skills-lock.json`)
 }
 
 // ====================== PostgreSQL Helpers ======================

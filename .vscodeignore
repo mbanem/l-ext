@@ -6,7 +6,10 @@ node_modules/**
 .claude/**
 .windsurf/**
 *.vsix
+**/.env
+**/.env.*
 .env
+.env.*
 tsconfig.json
 pnpm-lock.yaml
 .github

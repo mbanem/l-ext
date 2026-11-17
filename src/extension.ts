@@ -16,6 +16,21 @@ let wView: vscode.Webview | undefined = undefined
 const videoNames = [
   'CRActivity', 'CRInput', 'CRModelPermissions', 'CRSpinner', 'CRSummaryDetails', 'CRTooltip'
 ]
+
+export const channel = vscode.window.createOutputChannel('CRUD Support')
+export const show = (msg: string | string[], chShow: boolean = false) => {
+  channel.appendLine(Array.isArray(msg) ? msg.join('\n') : msg)
+  // if (chShow) {
+  channel.show()
+  // }
+}
+export const error = (msg: string) => {
+  vscode.window.showErrorMessage(msg)
+  channel.appendLine(`ERROR: ${msg}`)
+}
+export const info = (msg: string) => {
+  vscode.window.showInformationMessage(msg)
+}
 export async function isFile(targetUri: vscode.Uri): Promise<boolean> {
   try {
     const stat = await vscode.workspace.fs.stat(targetUri);
@@ -198,7 +213,6 @@ async function getWorkspaceRootUri(): Promise<vscode.Uri | undefined> {
 
 export async function activate(context: vscode.ExtensionContext) {
   try {
-    // show('l-ext.crudTest ACTIVATED')
     console.log(`CRUD l-ext -- activated`)
     // inDevelopmentMode = context.extensionMode === ExtensionMode.Development
     if (panel) {
@@ -207,7 +221,6 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
       vscode.commands.registerCommand('l-ext.crudTest', async () => {
         console.log('l-ext.crudTest REGISTERED')
-
         // reuse an existing panel
         if (panel) {
           console.log('[CRUD] Existing panel found');
@@ -289,14 +302,15 @@ export async function activate(context: vscode.ExtensionContext) {
           return
         }
 
-        console.log(`before setupOrmOneMessageHandler`)
+        show(`before setupOrmOneMessageHandler`)
+
         let res = await setupOrmOneMessageHandler(context, panel!, paths)
-        console.log('[extension] setupOrmOneMessageHandler result', res)
+        show(`[extension] setupOrmOneMessageHandler result ${res.success}`)
         if (!res.success) {
-          console.log('[extension] setupOrmOneMessageHandler failed', res)
+          show(`[extension] setupOrmOneMessageHandler failed, ${res.success}`)
           return
         } else {
-          console.log('[extension] setupOrmOneMessageHandler succeeded', res)
+          show(`[extension] setupOrmOneMessageHandler succeeded, ${res.success}`)
         }
 
         panel!.onDidDispose(() => {

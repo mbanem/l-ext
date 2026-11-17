@@ -1,2 +1,6 @@
 **/.windsurf/**
 **/.agents/**
+**/.env
+**/.env.*
+.env
+.env.*

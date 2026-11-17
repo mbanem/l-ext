@@ -5,5 +5,7 @@ allowBuilds:
   prisma: true
   svelte-preprocess: true
 permissions:
+  bcrypt:
+    build: true
   dotenv:
     skills: false
